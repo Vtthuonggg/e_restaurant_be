@@ -5,12 +5,16 @@ namespace App\Http\Controllers;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Customer;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Termwind\Components\Raw;
 
 class CustomerController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        return response()->json(Customer::all());
+        $perPage = $request->query('per_page', 20);
+        $customers = Customer::paginate($perPage);
+        return response()->json(['status' => 'success', 'data' => $customers]);
     }
 
     public function store(Request $request)
@@ -23,7 +27,7 @@ class CustomerController extends Controller
 
         $validated['user_id'] = Auth::id();
         $customer = Customer::create($validated);
-        return response()->json($customer, 201);
+        return response()->json(['status' => 'success', 'data' => $customer], 201);
     }
 
     public function show($id)

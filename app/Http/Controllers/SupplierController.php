@@ -8,15 +8,16 @@ use Illuminate\Support\Facades\Auth;
 
 class SupplierController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $suppliers = Supplier::all();
+        $perPage = $request->query('per_page', 20);
+        $suppliers = Supplier::paginate($perPage);
         return response()->json(['status' => 'success', 'data' => $suppliers]);
     }
 
     public function store(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'name' => 'required|string|max:255',
             'phone' => 'required|string|max:20|unique:suppliers,phone',
             'address' => 'nullable|string|max:500',

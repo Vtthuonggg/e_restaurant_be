@@ -5,6 +5,7 @@ use App\Http\Controllers\AuthController;
 use Illuminate\Http\Request;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\SupplierController;
+use App\Http\Controllers\CategoryController;
 
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
@@ -19,4 +20,5 @@ Route::middleware('auth:sanctum')->group(function () {
     });
     Route::apiResource('customer', CustomerController::class);
     Route::apiResource('supplier', SupplierController::class);
+    Route::apiResource('category', CategoryController::class);
 });
