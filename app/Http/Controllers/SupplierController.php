@@ -10,9 +10,25 @@ class SupplierController extends Controller
 {
     public function index(Request $request)
     {
-        $perPage = $request->query('per_page', 20);
+        $perPage = (int) $request->query('per_page', 20);
+        $page = (int) $request->query('page', 1);
         $suppliers = Supplier::paginate($perPage);
-        return response()->json(['status' => 'success', 'data' => $suppliers]);
+        $query = Supplier::query();
+
+        $total = $query->count();
+        $suppliers = $query->paginate($perPage, ['*'], 'page', $page);
+        return response()->json([
+            'success' => true,
+            'status' => 200,
+            'message' => 'Thao tác thành công!',
+            'data' => $suppliers->items(),
+            'meta' => [
+                'total' => $total,
+                'size' => $suppliers->count(),
+                'current_page' => $page,
+                'last_page' => $suppliers->lastPage()
+            ]
+        ]);
     }
 
     public function store(Request $request)

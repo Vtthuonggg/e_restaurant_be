@@ -12,9 +12,24 @@ class CustomerController extends Controller
 {
     public function index(Request $request)
     {
-        $perPage = $request->query('per_page', 20);
+       $perPage = (int) $request->query('per_page', 20);
+        $page = (int) $request->query('page', 1);
         $customers = Customer::paginate($perPage);
-        return response()->json(['status' => 'success', 'data' => $customers]);
+        $query = Customer::query();
+        $total = $query->count();
+        $customers = $query->paginate($perPage, ['*'], 'page', $page);
+        return response()->json([
+            'success' => true,
+            'status' => 200,
+            'message' => 'Thao tác thành công!',
+            'data' => $customers->items(),
+            'meta' => [
+                'total' => $total,
+                'size' => $customers->count(),
+                'current_page' => $page,
+                'last_page' => $customers->lastPage()
+            ]
+        ]);
     }
 
     public function store(Request $request)
