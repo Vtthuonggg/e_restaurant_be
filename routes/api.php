@@ -9,6 +9,10 @@ use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\IngredientController;
+use App\Http\Controllers\AreaController;
+use App\Http\Controllers\RoomController;
+use App\Http\Controllers\OrderController;
+
 
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
@@ -28,4 +32,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('employee', EmployeeController::class);
     Route::apiResource('product', ProductController::class);
     Route::apiResource('ingredient', IngredientController::class);
+    Route::apiResource('area', AreaController::class);
+    Route::apiResource('room', RoomController::class);
+    Route::apiResource('order', OrderController::class);
 });

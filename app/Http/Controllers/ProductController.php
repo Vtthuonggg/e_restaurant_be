@@ -51,15 +51,12 @@ class ProductController extends Controller
             'ingredients.*.quantity' => 'required|numeric|min:0',
         ]);
 
-        // Set default values
         $validated['retail_cost'] = $validated['retail_cost'] ?? 0;
         $validated['user_id'] = Auth::id();
 
-        // Tạo product trước
         $product = Product::create($validated);
 
         if ($request->has('category_ids')) {
-            // Chỉ cho phép attach categories của user hiện tại
             $userCategoryIds = \App\Models\Category::where('user_id', Auth::id())
                 ->whereIn('id', $request->category_ids)
                 ->pluck('id')
@@ -67,7 +64,6 @@ class ProductController extends Controller
             $product->categories()->attach($userCategoryIds);
         }
 
-        // Load lại categories để trả về
         $product->load('categories');
         $product = Product::create($validated);
 
