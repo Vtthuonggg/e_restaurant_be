@@ -5,9 +5,18 @@ namespace App\Http\Controllers;
 use App\Models\Ingredient;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use App\Services\CloudinaryService;
 
 class IngredientController extends Controller
 {
+
+    protected $cloudinaryService;
+
+    public function __construct(CloudinaryService $cloudinaryService)
+    {
+        $this->cloudinaryService = $cloudinaryService;
+    }
+
     public function index(Request $request)
     {
 
@@ -75,6 +84,9 @@ class IngredientController extends Controller
             'image' => 'nullable|string|max:255',
             'unit' => 'nullable|string|max:50',
         ]);
+        if (isset($validated['image']) && $validated['image'] !== $ingredient->image && $ingredient->image) {
+            $this->cloudinaryService->deleteImageByUrl($ingredient->image);
+        }
 
         if (array_key_exists('base_cost', $validated)) {
             $validated['base_cost'] = $validated['base_cost'] ?? 0;
@@ -95,6 +107,9 @@ class IngredientController extends Controller
         $ingredient = Ingredient::where('user_id', Auth::id())->find($id);
         if (!$ingredient) {
             return response()->json(['status' => 'error', 'message' => 'Không tìm thấy nguyên liệu'], 404);
+        }
+        if ($ingredient->image) {
+            $this->cloudinaryService->deleteImageByUrl($ingredient->image);
         }
         $ingredient->delete();
         return response()->json(['status' => 'success', 'message' => 'Xóa nguyên liệu thành công']);

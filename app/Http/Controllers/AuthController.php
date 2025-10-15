@@ -7,9 +7,16 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use App\Models\Employee;
+use App\Services\CloudinaryService;
 
 class   AuthController extends Controller
 {
+    protected $cloudinaryService;
+
+    public function __construct(CloudinaryService $cloudinaryService)
+    {
+        $this->cloudinaryService = $cloudinaryService;
+    }
     public function register(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -101,7 +108,12 @@ class   AuthController extends Controller
             'name' => 'sometimes|string|max:255',
             'email' => 'sometimes|email|max:255',
             'image' => 'sometimes|string|max:255',
+            'store_name' => 'sometimes|string|max:255',
+            'address' => 'sometimes|string|max:255'
         ]);
+        if (isset($validated['image']) && $validated['image'] !== $user->image && $user->image) {
+            $this->cloudinaryService->deleteImageByUrl($user->image);
+        }
 
         $user->update($validated);
 

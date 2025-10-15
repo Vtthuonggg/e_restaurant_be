@@ -6,9 +6,17 @@ use App\Models\Product;
 use App\Models\Ingredient;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use App\Services\CloudinaryService;
 
 class ProductController extends Controller
 {
+
+    protected $cloudinaryService;
+
+    public function __construct(CloudinaryService $cloudinaryService)
+    {
+        $this->cloudinaryService = $cloudinaryService;
+    }
     public function index(Request $request)
     {
         $perPage = (int) $request->query('per_page', 20);
@@ -102,7 +110,9 @@ class ProductController extends Controller
             'ingredients.*.quantity' => 'required|numeric|min:0',
         ]);
 
-
+        if (isset($validated['image']) && $validated['image'] !== $product->image && $product->image) {
+            $this->cloudinaryService->deleteImageByUrl($product->image);
+        }
         if (array_key_exists('retail_cost', $validated)) {
             $validated['retail_cost'] = $validated['retail_cost'] ?? 0;
         }
@@ -126,7 +136,10 @@ class ProductController extends Controller
         if (!$product) {
             return response()->json(['status' => 'error', 'message' => 'Không tìm thấy sản phẩm'], 404);
         }
-
+        if ($product->image) {
+            $this->cloudinaryService->deleteImageByUrl($product->image);
+        }
+        $product->categories()->detach();
         $product->delete();
         return response()->json(['status' => 'success', 'message' => 'Xóa sản phẩm thành công']);
     }

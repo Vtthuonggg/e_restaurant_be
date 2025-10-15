@@ -12,6 +12,7 @@ use App\Http\Controllers\IngredientController;
 use App\Http\Controllers\AreaController;
 use App\Http\Controllers\RoomController;
 use App\Http\Controllers\OrderController;
+use App\Services\CloudinaryService;
 
 
 Route::post('/register', [AuthController::class, 'register']);
