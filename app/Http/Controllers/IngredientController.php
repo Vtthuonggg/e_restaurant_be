@@ -27,6 +27,10 @@ class IngredientController extends Controller
 
         $total = $query->count();
         $ingredients = $query->paginate($perPage, ['*'], 'page', $page);
+        if ($request->filled('name')) {
+            $name = $request->query('name');
+            $query->where('name', 'like', '%' . $name . '%');
+        }
         return response()->json([
             'success' => true,
             'status' => 200,

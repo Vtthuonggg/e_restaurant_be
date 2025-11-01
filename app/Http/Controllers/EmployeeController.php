@@ -15,7 +15,10 @@ class EmployeeController extends Controller
         $page = (int) $request->query('page', 1);
 
         $query = Employee::where('user_id', Auth::id());
-
+        if ($request->filled('name')) {
+            $name = $request->query('name');
+            $query->where('name', 'like', '%' . $name . '%');
+        }
         $total = $query->count();
         $employees = $query->paginate($perPage, ['*'], 'page', $page);
 

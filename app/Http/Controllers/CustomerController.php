@@ -12,12 +12,18 @@ class CustomerController extends Controller
 {
     public function index(Request $request)
     {
-       $perPage = (int) $request->query('per_page', 20);
+        $perPage = (int) $request->query('per_page', 20);
         $page = (int) $request->query('page', 1);
         $customers = Customer::paginate($perPage);
-        $query = Customer::query();
+
+        $query = Customer::where('user_id', Auth::id());
+        if ($request->filled('name')) {
+            $name = $request->query('name');
+            $query->where('name', 'like', '%' . $name . '%');
+        }
         $total = $query->count();
         $customers = $query->paginate($perPage, ['*'], 'page', $page);
+
         return response()->json([
             'success' => true,
             'status' => 200,

@@ -13,10 +13,14 @@ class SupplierController extends Controller
         $perPage = (int) $request->query('per_page', 20);
         $page = (int) $request->query('page', 1);
         $suppliers = Supplier::paginate($perPage);
-        $query = Supplier::query();
-
+        $query = Supplier::where('user_id', Auth::id());
+        if ($request->filled('name')) {
+            $name = $request->query('name');
+            $query->where('name', 'like', '%' . $name . '%');
+        }
         $total = $query->count();
         $suppliers = $query->paginate($perPage, ['*'], 'page', $page);
+
         return response()->json([
             'success' => true,
             'status' => 200,

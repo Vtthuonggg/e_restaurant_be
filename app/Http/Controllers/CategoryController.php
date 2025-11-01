@@ -13,8 +13,11 @@ class CategoryController extends Controller
         $perPage = (int) $request->query('per_page', 20);
         $page = (int) $request->query('page', 1);
         $categories = Category::paginate($perPage);
-        $query = Category::query();
-
+        $query = Category::where('user_id', Auth::id());
+        if ($request->filled('name')) {
+            $name = $request->query('name');
+            $query->where('name', 'like', '%' . $name . '%');
+        }
         $total = $query->count();
         $categories = $query->paginate($perPage, ['*'], 'page', $page);
         return response()->json([
