@@ -106,10 +106,10 @@ class   AuthController extends Controller
 
         $validated = $request->validate([
             'name' => 'sometimes|string|max:255',
-            'email' => 'sometimes|email|max:255',
-            'image' => 'sometimes|string|max:255',
-            'store_name' => 'sometimes|string|max:255',
-            'address' => 'sometimes|string|max:255'
+            'email' => 'nullable|email|max:255',
+            'image' => 'nullable|string|max:255',
+            'store_name' => 'nullable|string|max:255',
+            'address' => 'nullable|string|max:255'
         ]);
         if (isset($validated['image']) && $validated['image'] !== $user->image && $user->image) {
             $this->cloudinaryService->deleteImageByUrl($user->image);
