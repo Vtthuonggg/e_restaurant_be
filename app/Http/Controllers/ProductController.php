@@ -53,6 +53,7 @@ class ProductController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'retail_cost' => 'nullable|integer',
+            'base_cost' => 'nullable|integer',
             'image' => 'nullable|string|max:255',
             'unit' => 'nullable|string|max:50',
             'category_ids' => 'nullable|array',
@@ -104,6 +105,7 @@ class ProductController extends Controller
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'retail_cost' => 'nullable|integer',
+            'base_cost' => 'nullable|integer',
             'image' => 'nullable|string|max:255',
             'unit' => 'nullable|string|max:50',
             'category_ids' => 'nullable|array',
@@ -119,6 +121,10 @@ class ProductController extends Controller
         if (array_key_exists('retail_cost', $validated)) {
             $validated['retail_cost'] = $validated['retail_cost'] ?? 0;
         }
+        if (array_key_exists('base_cost', $validated)) {
+            $validated['base_cost'] = $validated['base_cost'] ?? 0;
+        }
+
         if ($request->has('category_ids')) {
             $userCategoryIds = \App\Models\Category::where('user_id', Auth::id())
                 ->whereIn('id', $request->category_ids)

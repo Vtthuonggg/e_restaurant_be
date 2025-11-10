@@ -7,9 +7,10 @@ use Illuminate\Database\Eloquent\Model;
 class Product extends Model
 {
     protected $fillable = [
-        'name', 
-        'retail_cost', 
-        'image', 
+        'name',
+        'retail_cost',
+        'base_cost',
+        'image',
         'unit',
         'category_ids',
         'ingredients'
@@ -21,7 +22,7 @@ class Product extends Model
         'retail_cost' => 'integer',
     ];
 
-  public function categories()
+    public function categories()
     {
         return $this->belongsToMany(Category::class, 'product_category');
     }
@@ -30,10 +31,10 @@ class Product extends Model
     public function getIngredientsWithDetails()
     {
         if (!$this->ingredients) return [];
-        
+
         $ingredientIds = collect($this->ingredients)->pluck('id');
         $ingredientDetails = Ingredient::whereIn('id', $ingredientIds)->get()->keyBy('id');
-        
+
         return collect($this->ingredients)->map(function ($ingredient) use ($ingredientDetails) {
             $detail = $ingredientDetails->get($ingredient['id']);
             return [
