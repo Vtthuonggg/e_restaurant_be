@@ -13,6 +13,7 @@ use App\Http\Controllers\AreaController;
 use App\Http\Controllers\RoomController;
 use App\Http\Controllers\OrderController;
 use App\Services\CloudinaryService;
+use App\Http\Controllers\ReportController;
 
 
 Route::post('/register', [AuthController::class, 'register']);
@@ -36,4 +37,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('area', AreaController::class);
     Route::apiResource('room', RoomController::class);
     Route::apiResource('order', OrderController::class);
+    Route::prefix('report')->group(function () {
+        Route::get('/revenue', [ReportController::class, 'revenueReport']);
+        Route::get('/product-sales', [ReportController::class, 'productSalesReport']);
+        Route::get('/ingredient-purchase', [ReportController::class, 'ingredientPurchaseReport']);
+        Route::get('/dashboard', [ReportController::class, 'dashboardReport']);
+    });
 });
