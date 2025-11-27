@@ -27,7 +27,8 @@ class User extends Authenticatable
         'user_type',
         'api_key',
         'store_name',
-        'address'
+        'address',
+        'owner_id'
     ];
 
     /**
@@ -61,5 +62,39 @@ class User extends Authenticatable
     public function suppliers()
     {
         return $this->hasMany(Supplier::class);
+    }
+
+    public function managedEmployees()
+    {
+        return $this->hasManyThrough(
+            User::class,
+            EmployeeManager::class,
+            'user_id',
+            'id',
+            'id',
+            'employee_id'
+        );
+    }
+
+    public function managers()
+    {
+        return $this->hasManyThrough(
+            User::class,
+            EmployeeManager::class,
+            'employee_id',
+            'id',
+            'id',
+            'user_id'
+        );
+    }
+
+    public function employeeManagerRelation()
+    {
+        return $this->hasMany(EmployeeManager::class, 'employee_id');
+    }
+
+    public function managerEmployeeRelation()
+    {
+        return $this->hasMany(EmployeeManager::class, 'user_id');
     }
 }

@@ -42,6 +42,7 @@ class Product extends Model
                 'quantity' => $ingredient['quantity'],
                 'name' => $detail->name ?? null,
                 'unit' => $detail->unit ?? null,
+                'image' => $detail->image ?? null,
             ];
         });
     }

@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Employee;
+use App\Models\User;
+use App\Models\EmployeeManager;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
 
 class EmployeeController extends Controller
 {
@@ -14,24 +16,39 @@ class EmployeeController extends Controller
         $perPage = (int) $request->query('per_page', 20);
         $page = (int) $request->query('page', 1);
 
-        $query = Employee::where('user_id', Auth::id());
+        $query = EmployeeManager::forUser(Auth::id())
+            ->with(['employee']);
+
         if ($request->filled('name')) {
             $name = $request->query('name');
-            $query->where('name', 'like', '%' . $name . '%');
+            $query->whereHas('employee', function ($q) use ($name) {
+                $q->where('name', 'like', '%' . $name . '%');
+            });
         }
+
+        if ($request->filled('role')) {
+            $query->where('role', $request->query('role'));
+        }
+
         $total = $query->count();
-        $employees = $query->paginate($perPage, ['*'], 'page', $page);
+        $employeeRelations = $query->paginate($perPage, ['*'], 'page', $page);
+
+        $employees = $employeeRelations->getCollection()->map(function ($relation) {
+            $employee = $relation->employee;
+            $employee->role = $relation->role;
+            return $employee;
+        });
 
         return response()->json([
             'success' => true,
             'status' => 200,
             'message' => 'Thao tác thành công!',
-            'data' => $employees->items(),
+            'data' => $employees,
             'meta' => [
                 'total' => $total,
                 'size' => $employees->count(),
                 'current_page' => $page,
-                'last_page' => $employees->lastPage()
+                'last_page' => $employeeRelations->lastPage()
             ]
         ]);
     }
@@ -40,50 +57,132 @@ class EmployeeController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'phone' => 'required|string|max:20|unique:employees,phone',
+            'phone' => 'required|string|max:20|unique:users,phone',
             'password' => 'nullable|string|min:6',
+            'role' => 'sometimes|string|in:employee,supervisor,cashier,chef',
         ]);
 
-        $validated['user_id'] = Auth::id();
-        $employee = Employee::create($validated);
+        DB::beginTransaction();
+        try {
+            // Tạo user mới với user_type = 3
+            $employee = User::create([
+                'name' => $validated['name'],
+                'phone' => $validated['phone'],
+                'password' => isset($validated['password']) ? Hash::make($validated['password']) : null,
+                'user_type' => 3
+            ]);
 
-        return response()->json(['status' => 'success', 'data' => $employee], 201);
+            // Tạo quan hệ trong bảng employee_manager
+            EmployeeManager::create([
+                'user_id' => Auth::id(),
+                'employee_id' => $employee->id,
+                'role' => $validated['role'] ?? 'employee'
+            ]);
+
+            DB::commit();
+
+            // Gán role để trả về
+            $employee->role = $validated['role'] ?? 'employee';
+
+            return response()->json(['status' => 'success', 'data' => $employee], 201);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['status' => 'error', 'message' => 'Lỗi khi tạo nhân viên: ' . $e->getMessage()], 500);
+        }
     }
 
     public function show($id)
     {
-        $employee = Employee::where('user_id', Auth::id())->find($id);
-        if (!$employee) {
+        $relation = EmployeeManager::forUser(Auth::id())
+            ->with(['employee'])
+            ->whereHas('employee', function ($q) use ($id) {
+                $q->where('id', $id);
+            })
+            ->first();
+
+        if (!$relation) {
             return response()->json(['status' => 'error', 'message' => 'Không tìm thấy nhân viên'], 404);
         }
+
+        $employee = $relation->employee;
+        $employee->role = $relation->role;
+
         return response()->json(['status' => 'success', 'data' => $employee]);
     }
 
     public function update(Request $request, $id)
     {
-        $employee = Employee::where('user_id', Auth::id())->find($id);
-        if (!$employee) {
+        $validated = $request->validate([
+            'name' => 'sometimes|required|string|max:255',
+            'phone' => 'sometimes|required|string|max:20|unique:users,phone,' . $id,
+            'password' => 'nullable|string|min:6',
+            'role' => 'sometimes|string|in:employee,supervisor,cashier,chef',
+        ]);
+
+        $relation = EmployeeManager::forUser(Auth::id())
+            ->whereHas('employee', function ($q) use ($id) {
+                $q->where('id', $id);
+            })
+            ->first();
+
+        if (!$relation) {
             return response()->json(['status' => 'error', 'message' => 'Không tìm thấy nhân viên'], 404);
         }
 
-        $validated = $request->validate([
-            'name' => 'sometimes|required|string|max:255',
-            'phone' => 'sometimes|required|string|max:20|unique:employees,phone,' . $id,
-            'password' => 'nullable|string|min:6',
-        ]);
+        DB::beginTransaction();
+        try {
+            // Cập nhật thông tin user
+            $updateData = [];
+            if (isset($validated['name'])) $updateData['name'] = $validated['name'];
+            if (isset($validated['phone'])) $updateData['phone'] = $validated['phone'];
+            if (isset($validated['password'])) $updateData['password'] = Hash::make($validated['password']);
 
-        $employee->update($validated);
-        return response()->json(['status' => 'success', 'data' => $employee]);
+            if (!empty($updateData)) {
+                $relation->employee->update($updateData);
+            }
+
+            // Cập nhật role nếu có
+            if (isset($validated['role'])) {
+                $relation->update(['role' => $validated['role']]);
+            }
+
+            DB::commit();
+
+            $employee = $relation->fresh('employee')->employee;
+            $employee->role = $relation->role;
+
+            return response()->json(['status' => 'success', 'data' => $employee]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['status' => 'error', 'message' => 'Lỗi khi cập nhật nhân viên: ' . $e->getMessage()], 500);
+        }
     }
 
     public function destroy($id)
     {
-        $employee = Employee::where('user_id', Auth::id())->find($id);
-        if (!$employee) {
+        $relation = EmployeeManager::forUser(Auth::id())
+            ->whereHas('employee', function ($q) use ($id) {
+                $q->where('id', $id);
+            })
+            ->first();
+
+        if (!$relation) {
             return response()->json(['status' => 'error', 'message' => 'Không tìm thấy nhân viên'], 404);
         }
 
-        $employee->delete();
-        return response()->json(['status' => 'success', 'message' => 'Xóa nhân viên thành công']);
+        DB::beginTransaction();
+        try {
+            // Xóa quan hệ
+            $relation->delete();
+
+            // Xóa user (employee)
+            $relation->employee->delete();
+
+            DB::commit();
+            return response()->json(['status' => 'success', 'message' => 'Xóa nhân viên thành công']);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['status' => 'error', 'message' => 'Lỗi khi xóa nhân viên: ' . $e->getMessage()], 500);
+        }
     }
 }

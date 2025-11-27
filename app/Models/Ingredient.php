@@ -8,6 +8,7 @@ class Ingredient extends Model
 {
     protected $fillable = [
         'name',
+        'user_id',
         'base_cost',
         'retail_cost',
         'in_stock',
@@ -22,4 +23,8 @@ class Ingredient extends Model
         'in_stock' => 'double',
         'available' => 'double'
     ];
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
 }

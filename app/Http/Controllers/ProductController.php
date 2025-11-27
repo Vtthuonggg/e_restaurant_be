@@ -22,26 +22,80 @@ class ProductController extends Controller
         $perPage = (int) $request->query('per_page', 20);
         $page = (int) $request->query('page', 1);
 
-        $query = Product::where('user_id', Auth::id())->with('categories');
-        if ($request->has('category_id')) {
-            $categoryId = $request->query('category_id');
-            $query->whereJsonContains('category_ids', (int)$categoryId);
-        }
+        $query = Product::where('user_id', Auth::id());
 
-        $total = $query->count();
-        $products = $query->paginate($perPage, ['*'], 'page', $page);
+        // Filter name TRƯỚC khi paginate
         if ($request->filled('name')) {
             $name = $request->query('name');
             $query->where('name', 'like', '%' . $name . '%');
         }
+
+        // Filter category
+        if ($request->has('category_id')) {
+            $categoryId = (int) $request->query('category_id');
+            $query->where(function ($q) use ($categoryId) {
+                $q->whereHas('categories', function ($q2) use ($categoryId) {
+                    $q2->where('categories.id', $categoryId);
+                })->orWhereJsonContains('category_ids', $categoryId);
+            });
+        }
+
+        $total = $query->count();
+        $products = $query->with('categories')->paginate($perPage, ['*'], 'page', $page);
+
+        // Đảm bảo mỗi product có categories đầy đủ thông tin
+        $items = collect($products->items())->map(function ($product) {
+            if ($product->relationLoaded('categories') && $product->categories && $product->categories->isNotEmpty()) {
+            } else {
+                if (!empty($product->category_ids)) {
+                    $ids = is_array($product->category_ids) ? $product->category_ids : json_decode($product->category_ids, true);
+                    if (is_array($ids) && count($ids) > 0) {
+                        $cats = \App\Models\Category::whereIn('id', $ids)
+                            ->where('user_id', Auth::id())
+                            ->get();
+                        $product->setRelation('categories', $cats);
+                    } else {
+                        $product->setRelation('categories', collect());
+                    }
+                } else {
+                    $product->setRelation('categories', collect());
+                }
+            }
+            $ingredients = [];
+            if (method_exists($product, 'getIngredientsWithDetails')) {
+                $ingredients = $product->getIngredientsWithDetails();
+            } else {
+                $raw = $product->ingredients;
+                if (!empty($raw)) {
+                    $decoded = is_array($raw) ? $raw : json_decode($raw, true);
+                    if (is_array($decoded)) {
+                        foreach ($decoded as $it) {
+                            $ingId = $it['id'] ?? $it['ingredient_id'] ?? null;
+                            $ingModel = $ingId ? \App\Models\Ingredient::find($ingId) : null;
+                            $ingredients[] = [
+                                'id' => $ingModel ? $ingModel->id : $ingId,
+                                'name' => $ingModel ? $ingModel->name : ($it['name'] ?? null),
+                                'unit' => $ingModel ? $ingModel->unit : ($it['unit'] ?? null),
+                                'image' => $ingModel ? ($ingModel->image ?? null) : ($it['image'] ?? null),
+                                'quantity' => $it['quantity'] ?? ($it['qty'] ?? 0),
+                            ];
+                        }
+                    }
+                }
+            }
+            $product->setAttribute('ingredients', $ingredients);
+
+            return $product;
+        });
+
         return response()->json([
             'success' => true,
             'status' => 200,
             'message' => 'Thao tác thành công!',
-            'data' => $products->items(),
+            'data' => $items->values()->all(),
             'meta' => [
                 'total' => $total,
-                'size' => $products->count(),
+                'size' => $items->count(),
                 'current_page' => $page,
                 'last_page' => $products->lastPage()
             ]
@@ -64,6 +118,7 @@ class ProductController extends Controller
         ]);
 
         $validated['retail_cost'] = $validated['retail_cost'] ?? 0;
+        $validated['base_cost'] = $validated['base_cost'] ?? 0; // Thêm dòng này
         $validated['user_id'] = Auth::id();
 
         $product = Product::create($validated);
@@ -77,7 +132,6 @@ class ProductController extends Controller
         }
 
         $product->load('categories');
-        $product = Product::create($validated);
 
         return response()->json(['status' => 'success', 'data' => $product], 201);
     }

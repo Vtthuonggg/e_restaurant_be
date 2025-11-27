@@ -11,20 +11,23 @@ return new class extends Migration
      */
     public function up(): void
     {
+        Schema::dropIfExists('employees');
+        Schema::dropIfExists('employees');
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
         Schema::create('employees', function (Blueprint $table) {
             $table->id();
             $table->string('name');
             $table->string('phone')->unique();
-            $table->string('password')->nullable(); // Có thể null
-            $table->unsignedBigInteger('user_id'); // ID của chủ quản lý
+            $table->string('password')->nullable();
+            $table->unsignedBigInteger('user_id');
             $table->timestamps();
             $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
         });
-    }
-
-
-    public function down(): void
-    {
-        Schema::dropIfExists('employees');
     }
 };

@@ -6,7 +6,6 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
-use App\Models\Employee;
 use App\Services\CloudinaryService;
 
 class   AuthController extends Controller
@@ -33,6 +32,7 @@ class   AuthController extends Controller
             'name' => $request->name,
             'phone' => $request->phone,
             'password' => Hash::make($request->password),
+            'user_type' => 2,
             'api_key' => bin2hex(random_bytes(32)),
         ]);
 
@@ -40,7 +40,7 @@ class   AuthController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'message' => 'User registered successfully',
+            'message' => 'Đăng ký thành công',
             'data' => [
                 'user' => $user,
                 'access_token' => $token,
@@ -62,8 +62,13 @@ class   AuthController extends Controller
         }
 
         if ($request->is_employee) {
-            $employee = Employee::where('phone', $request->phone)->first();
-            if (!$employee || !$employee->password || !Hash::check($request->password, $employee->password)) {
+            // Tìm employee (user_type = 3) và kiểm tra có trong employee_manager
+            $employee = User::where('phone', $request->phone)
+                ->where('user_type', 3)
+                ->whereHas('employeeRelations')
+                ->first();
+
+            if (!$employee || !Hash::check($request->password, $employee->password)) {
                 return response()->json(['status' => 'error', 'message' => 'Số điện thoại hoặc mật khẩu không đúng'], 401);
             }
 
@@ -81,7 +86,10 @@ class   AuthController extends Controller
             ], 200);
         }
 
-        $user = User::where('phone', $request->phone)->first();
+        // Login user thường (user_type = 2)
+        $user = User::where('phone', $request->phone)
+            ->where('user_type', 2)
+            ->first();
 
         if (!$user || !Hash::check($request->password, $user->password)) {
             return response()->json(['status' => 'error', 'message' => 'Số điện thoại hoặc mật khẩu không đúng'], 401);
@@ -96,7 +104,7 @@ class   AuthController extends Controller
                 'user' => $user,
                 'access_token' => $token,
                 'token_type' => 'Bearer',
-                'role' => 'manager'
+                'role' => 'owner'
             ]
         ], 200);
     }
