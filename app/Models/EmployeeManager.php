@@ -14,7 +14,7 @@ class EmployeeManager extends Model
         'employee_id',  // nhân viên (user_type = 3) 
         'role'
 
-    ];â
+    ];
 
 
 

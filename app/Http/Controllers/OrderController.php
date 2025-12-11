@@ -18,7 +18,7 @@ class OrderController extends Controller
         $page = (int) $request->query('page', 1);
 
         $query = Order::where('user_id', Auth::id())
-            ->with(['room', 'customer']);
+            ->with(['room.area', 'customer', 'supplier']);
 
         if ($request->has('type')) {
             $query->where('type', $request->type);
@@ -29,19 +29,22 @@ class OrderController extends Controller
         }
 
         $total = $query->count();
-        $orders = $query->paginate($perPage, ['*'], 'page', $page);
-        if ($request->filled('name')) {
-            $name = $request->query('name');
-            $query->where('name', 'like', '%' . $name . '%');
-        }
+        $orders = $query->orderBy('created_at', 'desc')
+            ->paginate($perPage, ['*'], 'page', $page);
+
+        // Enrich order_detail với thông tin product
+        $items = $orders->getCollection()->map(function ($order) {
+            return $this->enrichOrderDetail($order);
+        });
+
         return response()->json([
             'success' => true,
             'status' => 200,
             'message' => 'Thao tác thành công!',
-            'data' => $orders->items(),
+            'data' => $items,
             'meta' => [
                 'total' => $total,
-                'size' => $orders->count(),
+                'size' => $items->count(),
                 'current_page' => $page,
                 'last_page' => $orders->lastPage()
             ]
@@ -58,6 +61,7 @@ class OrderController extends Controller
             'discount' => 'sometimes|numeric|min:0',
             'discount_type' => 'sometimes|integer|in:1,2',
             'customer_id' => 'nullable|integer|exists:customers,id',
+            'supplier_id' => 'nullable|integer|exists:suppliers,id',
             'status_order' => 'sometimes|integer|in:1,2',
             'payment' => 'required|array',
             'payment.type' => 'required|integer|in:1,2,3',
@@ -65,14 +69,14 @@ class OrderController extends Controller
             'order_detail' => 'required|array|min:1',
             'order_detail.*.product_id' => 'required|integer|exists:products,id',
             'order_detail.*.quantity' => 'required|numeric|min:0.1',
+            'order_detail.*.user_price' => 'required|numeric|min:0',
             'order_detail.*.discount' => 'sometimes|numeric|min:0',
             'order_detail.*.discount_type' => 'sometimes|integer|in:1,2',
             'order_detail.*.note' => 'nullable|string',
-            'order_detail.*.price' => 'required|numeric|min:0',
             'order_detail.*.topping' => 'sometimes|array',
             'order_detail.*.topping.*.product_id' => 'required|integer|exists:products,id',
             'order_detail.*.topping.*.quantity' => 'required|numeric|min:0.1',
-            'order_detail.*.topping.*.price' => 'required|numeric|min:0',
+            'order_detail.*.topping.*.user_price' => 'required|numeric|min:0',
         ]);
 
         $validated['user_id'] = Auth::id();
@@ -99,6 +103,11 @@ class OrderController extends Controller
             }
 
             DB::commit();
+
+            // Load relationships và enrich order_detail
+            $order->load(['room.area', 'customer', 'supplier']);
+            $order = $this->enrichOrderDetail($order);
+
             return response()->json(['status' => 'success', 'data' => $order], 201);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -109,12 +118,15 @@ class OrderController extends Controller
     public function show($id)
     {
         $order = Order::where('user_id', Auth::id())
-            ->with(['room', 'customer'])
+            ->with(['room.area', 'customer', 'supplier'])
             ->find($id);
 
         if (!$order) {
             return response()->json(['status' => 'error', 'message' => 'Không tìm thấy đơn hàng'], 404);
         }
+
+        // Enrich order_detail với thông tin product đầy đủ
+        $order = $this->enrichOrderDetail($order);
 
         return response()->json(['status' => 'success', 'data' => $order]);
     }
@@ -134,6 +146,7 @@ class OrderController extends Controller
             'discount' => 'sometimes|numeric|min:0',
             'discount_type' => 'sometimes|integer|in:1,2',
             'customer_id' => 'nullable|integer|exists:customers,id',
+            'supplier_id' => 'nullable|integer|exists:suppliers,id',
             'status_order' => 'sometimes|integer|in:1,2',
             'payment' => 'sometimes|array',
             'payment.type' => 'required_with:payment|integer|in:1,2,3',
@@ -141,14 +154,14 @@ class OrderController extends Controller
             'order_detail' => 'sometimes|array|min:1',
             'order_detail.*.product_id' => 'required|integer|exists:products,id',
             'order_detail.*.quantity' => 'required|numeric|min:0.1',
+            'order_detail.*.user_price' => 'required|numeric|min:0',
             'order_detail.*.discount' => 'sometimes|numeric|min:0',
             'order_detail.*.discount_type' => 'sometimes|integer|in:1,2',
             'order_detail.*.note' => 'nullable|string',
-            'order_detail.*.price' => 'required|numeric|min:0',
             'order_detail.*.topping' => 'sometimes|array',
             'order_detail.*.topping.*.product_id' => 'required|integer|exists:products,id',
             'order_detail.*.topping.*.quantity' => 'required|numeric|min:0.1',
-            'order_detail.*.topping.*.price' => 'required|numeric|min:0',
+            'order_detail.*.topping.*.user_price' => 'required|numeric|min:0',
         ]);
 
         DB::beginTransaction();
@@ -169,11 +182,135 @@ class OrderController extends Controller
             }
 
             DB::commit();
+
+            $order->load(['room.area', 'customer', 'supplier']);
+            $order = $this->enrichOrderDetail($order);
+
             return response()->json(['status' => 'success', 'data' => $order]);
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['status' => 'error', 'message' => 'Lỗi khi cập nhật đơn hàng: ' . $e->getMessage()], 500);
         }
+    }
+
+    /**
+     * Enrich order_detail với thông tin product đầy đủ
+     */
+    private function enrichOrderDetail($order)
+    {
+        if (!$order->order_detail || !is_array($order->order_detail)) {
+            return $order;
+        }
+
+        $enrichedDetails = [];
+
+        foreach ($order->order_detail as $detail) {
+            $product = Product::find($detail['product_id']);
+
+            $enrichedDetail = [
+                'id' => $detail['product_id'],
+                'quantity' => $detail['quantity'],
+                'user_price' => $detail['user_price'] ?? $detail['price'] ?? 0,
+                'discount' => $detail['discount'] ?? 0,
+                'discount_type' => $detail['discount_type'] ?? 1,
+                'note' => $detail['note'] ?? null,
+                'product' => null
+            ];
+
+            if ($product) {
+                $enrichedDetail['product'] = [
+                    'id' => $product->id,
+                    'name' => $product->name,
+                    'image' => $product->image,
+                    'unit' => $product->unit,
+                    'retail_cost' => $product->retail_cost, // Giá bán gốc
+                    'base_cost' => $product->base_cost,     // Giá nhập gốc
+                    'user_price' => $detail['user_price'] ?? $detail['price'] ?? 0, // Giá người dùng nhập
+                ];
+            }
+
+            // Xử lý topping nếu có
+            if (isset($detail['topping']) && is_array($detail['topping'])) {
+                $enrichedDetail['topping'] = [];
+
+                foreach ($detail['topping'] as $topping) {
+                    $toppingProduct = Product::find($topping['product_id']);
+
+                    $enrichedTopping = [
+                        'id' => $topping['product_id'],
+                        'quantity' => $topping['quantity'],
+                        'user_price' => $topping['user_price'] ?? $topping['price'] ?? 0,
+                        'product' => null
+                    ];
+
+                    if ($toppingProduct) {
+                        $enrichedTopping['product'] = [
+                            'id' => $toppingProduct->id,
+                            'name' => $toppingProduct->name,
+                            'image' => $toppingProduct->image,
+                            'unit' => $toppingProduct->unit,
+                            'retail_cost' => $toppingProduct->retail_cost,
+                            'base_cost' => $toppingProduct->base_cost,
+                            'user_price' => $topping['user_price'] ?? $topping['price'] ?? 0,
+                        ];
+                    }
+
+                    $enrichedDetail['topping'][] = $enrichedTopping;
+                }
+            }
+
+            $enrichedDetails[] = $enrichedDetail;
+        }
+
+        // Thay thế order_detail bằng enriched version
+        $orderArray = $order->toArray();
+        $orderArray['order_detail'] = $enrichedDetails;
+
+        // Tính tổng tiền
+        $orderArray['total_amount'] = $this->calculateOrderTotal($enrichedDetails, $order->discount, $order->discount_type);
+
+        return $orderArray;
+    }
+
+    /**
+     * Tính tổng tiền đơn hàng
+     */
+    private function calculateOrderTotal($orderDetails, $orderDiscount, $orderDiscountType)
+    {
+        $total = 0;
+
+        foreach ($orderDetails as $detail) {
+            $itemTotal = $detail['user_price'] * $detail['quantity'];
+
+            // Trừ discount của item
+            if ($detail['discount'] > 0) {
+                if ($detail['discount_type'] == 1) { // %
+                    $itemTotal = $itemTotal * (1 - $detail['discount'] / 100);
+                } else { // VNĐ
+                    $itemTotal = $itemTotal - $detail['discount'];
+                }
+            }
+
+            // Cộng topping
+            if (isset($detail['topping'])) {
+                foreach ($detail['topping'] as $topping) {
+                    $itemTotal += $topping['user_price'] * $topping['quantity'];
+                }
+            }
+
+            $total += $itemTotal;
+        }
+
+        // Trừ discount của đơn hàng
+        if ($orderDiscount > 0) {
+            if ($orderDiscountType == 1) { // %
+                $total = $total * (1 - $orderDiscount / 100);
+            } else { // VNĐ
+                $total = $total - $orderDiscount;
+            }
+        }
+
+        return round($total, 2);
     }
 
     private function processIngredientStock($orderDetail, $statusOrder, $onlyInStock = false)
@@ -187,14 +324,11 @@ class OrderController extends Controller
                         $quantityToReduce = $ingredientData['quantity'] * $item['quantity'];
 
                         if ($onlyInStock) {
-                            // Chỉ trừ từ in_stock (khi chuyển từ chờ xác nhận -> hoàn thành)
                             $ingredient->decrement('in_stock', $quantityToReduce);
                         } else {
                             if ($statusOrder == 2) {
-                                // Chờ xác nhận: chỉ trừ available
                                 $ingredient->decrement('available', $quantityToReduce);
                             } elseif ($statusOrder == 1) {
-                                // Hoàn thành: trừ cả available và in_stock
                                 $ingredient->decrement('available', $quantityToReduce);
                                 $ingredient->decrement('in_stock', $quantityToReduce);
                             }

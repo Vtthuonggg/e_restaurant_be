@@ -14,6 +14,7 @@ class Order extends Model
         'discount',
         'discount_type',
         'customer_id',
+        'supplier_id',
         'status_order',
         'payment',
         'order_detail',
@@ -39,5 +40,9 @@ class Order extends Model
     public function customer()
     {
         return $this->belongsTo(Customer::class);
+    }
+    public function supplier()
+    {
+        return $this->belongsTo(Supplier::class);
     }
 }
