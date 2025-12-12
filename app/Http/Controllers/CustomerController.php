@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Customer;
 use Illuminate\Http\Request;
+use App\Http\Requests\CreateCustomerRequest;
+use App\Http\Requests\UpdateCustomerRequest;
 use Illuminate\Support\Facades\Log;
 use Termwind\Components\Raw;
 
@@ -38,14 +40,9 @@ class CustomerController extends Controller
         ]);
     }
 
-    public function store(Request $request)
+    public function store(CreateCustomerRequest $request)
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'phone' => 'nullable|string|max:20|unique:customers,phone',
-            'address' => 'nullable|string|max:255',
-        ]);
-
+        $validated = $request->validated();
         $validated['user_id'] = Auth::id();
         $customer = Customer::create($validated);
         return response()->json(['status' => 'success', 'data' => $customer], 201);
@@ -60,17 +57,13 @@ class CustomerController extends Controller
         return response()->json($customer);
     }
 
-    public function update(Request $request, $id)
+    public function update(UpdateCustomerRequest $request, $id)
     {
         $customer = Customer::find($id);
         if (!$customer) {
             return response()->json(['message' => 'Not found'], 404);
         }
-        $validated = $request->validate([
-            'name' => 'sometimes|string|max:255',
-            'phone' => 'sometimes|string|max:20|unique:customers,phone,' . $id,
-            'address' => 'nullable|string|max:255',
-        ]);
+        $validated = $request->validated();
         $customer->update($validated);
         return response()->json($customer);
     }

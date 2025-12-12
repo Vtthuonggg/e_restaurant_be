@@ -5,12 +5,16 @@ namespace App\Http\Controllers;
 use App\Models\Room;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use App\Http\Requests\CreateRoomRequest;
+use App\Http\Requests\UpdateRoomRequest;
+
+
 
 class RoomController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Room::where('user_id', Auth::id());
+        $query = Room::with('area')->where('user_id', Auth::id());
         if ($request->has('area_id')) {
             $query->where('area_id', $request->area_id);
         }
@@ -24,12 +28,9 @@ class RoomController extends Controller
         ]);
     }
 
-    public function store(Request $request)
+    public function store(CreateRoomRequest $request)
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'area_id' => 'required|integer|exists:areas,id',
-        ]);
+        $validated = $request->validated();
         $validated['user_id'] = Auth::id();
         $validated['status'] = $validated['status'] ?? 'free';
         $room = Room::create($validated);
@@ -38,23 +39,20 @@ class RoomController extends Controller
 
     public function show($id)
     {
-        $room = Room::where('user_id', Auth::id())->find($id);
+        $room = Room::with('area')->where('user_id', Auth::id())->find($id);
         if (!$room) {
             return response()->json(['status' => 'error', 'message' => 'Không tìm thấy bàn'], 404);
         }
         return response()->json(['status' => 'success', 'data' => $room]);
     }
 
-    public function update(Request $request, $id)
+    public function update(UpdateRoomRequest $request, $id)
     {
         $room = Room::where('user_id', Auth::id())->find($id);
         if (!$room) {
             return response()->json(['status' => 'error', 'message' => 'Không tìm thấy bàn'], 404);
         }
-        $validated = $request->validate([
-            'name' => 'sometimes|required|string|max:255',
-            'area_id' => 'sometimes|required|integer|exists:areas,id',
-        ]);
+        $validated = $request->validated();
         $room->update($validated);
         return response()->json(['status' => 'success', 'data' => $room]);
     }

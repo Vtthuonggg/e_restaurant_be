@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
+use App\Http\Requests\CreateCategoryRequest;
+use App\Http\Requests\UpdateCategoryRequest;
 use App\Models\Category;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class CategoryController extends Controller
@@ -34,12 +36,10 @@ class CategoryController extends Controller
         ]);
     }
 
-    public function store(Request $request)
+    public function store(CreateCategoryRequest $request)
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'description' => 'nullable|string|max:500',
-        ]);
+        $validated = $request->validated();
+
         $validated['user_id'] = Auth::id();
         $category = Category::create($validated);
         return response()->json(['status' => 'success', 'data' => $category], 201);
@@ -54,19 +54,14 @@ class CategoryController extends Controller
         return response()->json(['status' => 'success', 'data' => $category]);
     }
 
-    public function update(Request $request, $id)
+    public function update(UpdateCategoryRequest $request, $id)
     {
         $category = Category::find($id);
         if (!$category) {
             return response()->json(['status' => 'error', 'message' => 'Không tìm thấy danh mục'], 404);
         }
 
-        $request->validate([
-            'name' => 'sometimes|required|string|max:255',
-            'description' => 'nullable|string|max:500',
-        ]);
-
-        $category->update($request->only('name', 'description'));
+        $category->update($request->validated());
         return response()->json(['status' => 'success', 'data' => $category]);
     }
 

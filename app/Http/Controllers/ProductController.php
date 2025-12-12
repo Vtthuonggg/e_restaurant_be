@@ -7,6 +7,8 @@ use App\Models\Ingredient;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Services\CloudinaryService;
+use App\Http\Requests\CreateProductRequest;
+use App\Http\Requests\UpdateProductRequest;
 
 class ProductController extends Controller
 {
@@ -102,20 +104,9 @@ class ProductController extends Controller
         ]);
     }
 
-    public function store(Request $request)
+    public function store(CreateProductRequest $request)
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'retail_cost' => 'nullable|integer',
-            'base_cost' => 'nullable|integer',
-            'image' => 'nullable|string|max:255',
-            'unit' => 'nullable|string|max:50',
-            'category_ids' => 'nullable|array',
-            'category_ids.*' => 'integer|exists:categories,id',
-            'ingredients' => 'nullable|array',
-            'ingredients.*.id' => 'required|integer|exists:ingredients,id',
-            'ingredients.*.quantity' => 'required|numeric|min:0',
-        ]);
+        $validated = $request->validated();
 
         $validated['retail_cost'] = $validated['retail_cost'] ?? 0;
         $validated['base_cost'] = $validated['base_cost'] ?? 0; // Thêm dòng này
@@ -149,25 +140,14 @@ class ProductController extends Controller
         return response()->json(['status' => 'success', 'data' => $product]);
     }
 
-    public function update(Request $request, $id)
+    public function update(UpdateProductRequest $request, $id)
     {
         $product = Product::where('user_id', Auth::id())->find($id);
         if (!$product) {
             return response()->json(['status' => 'error', 'message' => 'Không tìm thấy sản phẩm'], 404);
         }
 
-        $validated = $request->validate([
-            'name' => 'sometimes|required|string|max:255',
-            'retail_cost' => 'nullable|integer',
-            'base_cost' => 'nullable|integer',
-            'image' => 'nullable|string|max:255',
-            'unit' => 'nullable|string|max:50',
-            'category_ids' => 'nullable|array',
-            'category_ids.*' => 'integer|exists:categories,id',
-            'ingredients' => 'nullable|array',
-            'ingredients.*.id' => 'required|integer|exists:ingredients,id',
-            'ingredients.*.quantity' => 'required|numeric|min:0',
-        ]);
+        $validated = $request->validated();
 
         if (isset($validated['image']) && $validated['image'] !== $product->image && $product->image) {
             $this->cloudinaryService->deleteImageByUrl($product->image);

@@ -5,6 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Supplier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use App\Http\Requests\CreateSupplierRequest;
+use App\Http\Requests\UpdateSupplierRequest;
+
 
 class SupplierController extends Controller
 {
@@ -35,13 +38,9 @@ class SupplierController extends Controller
         ]);
     }
 
-    public function store(Request $request)
+    public function store(CreateSupplierRequest $request)
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'phone' => 'required|string|max:20|unique:suppliers,phone',
-            'address' => 'nullable|string|max:500',
-        ]);
+        $validated = $request->validated();
         $validated['user_id'] = Auth::id();
         $supplier = Supplier::create($validated);
         return response()->json(['status' => 'success', 'data' => $supplier], 201);
@@ -56,26 +55,22 @@ class SupplierController extends Controller
         return response()->json(['status' => 'success', 'data' => $supplier]);
     }
 
-    public function update(Request $request, $id)
+    public function update(UpdateSupplierRequest $request, $id)
     {
         $supplier = Supplier::find($id);
         if (!$supplier) {
             return response()->json(['status' => 'error', 'message' => 'Supplier not found'], 404);
         }
 
-        $request->validate([
-            'name' => 'sometimes|required|string|max:255',
-            'phone' => 'sometimes|required|string|max:20|unique:suppliers,phone,' . $id,
-            'address' => 'nullable|string|max:500',
-        ]);
 
-        $supplier->update($request->only('name', 'phone', 'address'));
+
+        $supplier->update($request->validated());
         return response()->json(['status' => 'success', 'data' => $supplier]);
     }
 
     public function destroy($id)
     {
-        $supplier = Supplier::find($id);
+        $supplier = Supplier::where('user_id', Auth::id())->find($id);
         if (!$supplier) {
             return response()->json(['status' => 'error', 'message' => 'Supplier not found'], 404);
         }

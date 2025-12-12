@@ -9,6 +9,7 @@ use App\Models\Room;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use App\Http\Requests\CreateOrderRequest;
 
 class OrderController extends Controller
 {
@@ -51,33 +52,9 @@ class OrderController extends Controller
         ]);
     }
 
-    public function store(Request $request)
+    public function store(CreateOrderRequest $request)
     {
-        $validated = $request->validate([
-            'type' => 'sometimes|integer|in:1,2',
-            'room_id' => 'nullable|integer|exists:rooms,id',
-            'room_type' => 'sometimes|string|in:free,using,pre_book',
-            'note' => 'nullable|string',
-            'discount' => 'sometimes|numeric|min:0',
-            'discount_type' => 'sometimes|integer|in:1,2',
-            'customer_id' => 'nullable|integer|exists:customers,id',
-            'supplier_id' => 'nullable|integer|exists:suppliers,id',
-            'status_order' => 'sometimes|integer|in:1,2',
-            'payment' => 'required|array',
-            'payment.type' => 'required|integer|in:1,2,3',
-            'payment.price' => 'required|numeric|min:0',
-            'order_detail' => 'required|array|min:1',
-            'order_detail.*.product_id' => 'required|integer|exists:products,id',
-            'order_detail.*.quantity' => 'required|numeric|min:0.1',
-            'order_detail.*.user_price' => 'required|numeric|min:0',
-            'order_detail.*.discount' => 'sometimes|numeric|min:0',
-            'order_detail.*.discount_type' => 'sometimes|integer|in:1,2',
-            'order_detail.*.note' => 'nullable|string',
-            'order_detail.*.topping' => 'sometimes|array',
-            'order_detail.*.topping.*.product_id' => 'required|integer|exists:products,id',
-            'order_detail.*.topping.*.quantity' => 'required|numeric|min:0.1',
-            'order_detail.*.topping.*.user_price' => 'required|numeric|min:0',
-        ]);
+        $validated = $request->validated();
 
         $validated['user_id'] = Auth::id();
         $validated['type'] = $validated['type'] ?? 1;

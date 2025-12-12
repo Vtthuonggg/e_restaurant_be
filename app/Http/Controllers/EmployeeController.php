@@ -8,6 +8,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
+use App\Http\Requests\CreateEmployeeRequest;
+use App\Http\Requests\UpdateEmployeeRequest;
 
 class EmployeeController extends Controller
 {
@@ -53,14 +55,9 @@ class EmployeeController extends Controller
         ]);
     }
 
-    public function store(Request $request)
+    public function store(CreateEmployeeRequest $request)
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'phone' => 'required|string|max:20|unique:users,phone',
-            'password' => 'nullable|string|min:6',
-            'role' => 'sometimes|string|in:employee,supervisor,cashier,chef',
-        ]);
+        $validated = $request->validated();
 
         DB::beginTransaction();
         try {

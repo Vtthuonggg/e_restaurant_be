@@ -4,8 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\Area;
 use Illuminate\Support\Facades\Auth;
+use App\Models\Room;
+use Illuminate\Support\Facades\DB;
+use App\Http\Requests\CreateAreaRequest;
+use App\Http\Requests\UpdateAreaRequest;
 
-use Illuminate\Http\Request;
+
 
 class AreaController extends Controller
 {
@@ -13,16 +17,29 @@ class AreaController extends Controller
     public function index()
     {
         $areas = Area::where('user_id', Auth::id())->get();
-        return response()->json($areas);
+        return response()->json([
+            'success' => true,
+            'status' => 200,
+            'message' => 'Thao tác thành công!',
+            'data' => $areas
+        ]);
     }
 
 
-    public function store(Request $request)
+    public function store(CreateAreaRequest $request)
     {
-        $validated = $request->validate(['name' => 'required|string|max:255']);
+        $validated = $request->validated();
         $validated['user_id'] = Auth::id();
         $area = Area::create($validated);
-        return response()->json($area, 201);
+        return response()->json(
+            [
+                'success' => true,
+                'status' => 200,
+                'message' => 'Thao tác thành công!',
+                'data' => $area
+            ],
+            201
+        );
     }
 
 
@@ -33,11 +50,11 @@ class AreaController extends Controller
         return response()->json($area);
     }
 
-    public function update(Request $request, string $id)
+    public function update(UpdateAreaRequest $request, string $id)
     {
         $area = Area::where('user_id', Auth::id())->find($id);
         if (!$area) return response()->json(['message' => 'Not found'], 404);
-        $validated = $request->validate(['name' => 'sometimes|string|max:255']);
+        $validated = $request->validated();
         $area->update($validated);
         return response()->json($area);
     }
@@ -47,7 +64,11 @@ class AreaController extends Controller
     {
         $area = Area::where('user_id', Auth::id())->find($id);
         if (!$area) return response()->json(['message' => 'Not found'], 404);
-        $area->delete();
+
+        DB::transaction(function () use ($area) {
+            Room::where('area_id', $area->id)->where('user_id', Auth::id())->delete();
+            $area->delete();
+        });
         return response()->json(['message' => 'Deleted']);
     }
 }
