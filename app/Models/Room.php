@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Room extends Model
 {
-    protected $fillable = ['name', 'area_id', 'user_id', 'status'];
+    protected $fillable = ['name', 'area_id', 'user_id', 'type'];
     protected $hidden = ['area_id'];
     public function area()
     {
