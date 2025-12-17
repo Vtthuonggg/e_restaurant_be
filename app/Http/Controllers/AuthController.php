@@ -53,7 +53,7 @@ class   AuthController extends Controller
                 ->first();
 
             if (!$employee || !Hash::check($data['password'], $employee->password)) {
-                return response()->json(['status' => 'error', 'message' => 'Số điện thoại hoặc mật khẩu không đúng'], 401);
+                return response()->json(['status' => 'error', 'message' => 'Email hoặc mật khẩu không đúng'], 401);
             }
 
             $token = $employee->createToken('employee_token')->plainTextToken;
@@ -70,12 +70,12 @@ class   AuthController extends Controller
             ], 200);
         }
 
-        $user = User::where('phone', $data['phone'])
+        $user = User::where('email', $data['email'])
             ->where('user_type', 2)
             ->first();
 
         if (!$user || !Hash::check($data['password'], $user->password)) {
-            return response()->json(['status' => 'error', 'message' => 'Số điện thoại hoặc mật khẩu không đúng'], 401);
+            return response()->json(['status' => 'error', 'message' => 'Email hoặc mật khẩu không đúng'], 401);
         }
 
         $token = $user->createToken('auth_token')->plainTextToken;

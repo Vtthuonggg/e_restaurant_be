@@ -19,10 +19,10 @@ class UpdateProfileRequest extends FormRequest
     {
         return [
             'name' => 'sometimes|string|max:255',
-            'email' => 'nullable|email|max:255',
-            'image' => 'nullable|string|max:255',
+            'phone' => 'nullable|string|max:10',
+            'image' => 'nullable|string',
             'store_name' => 'nullable|string|max:255',
-            'address' => 'nullable|string|max:255',
+            'address' => 'nullable|string',
         ];
     }
 
@@ -31,8 +31,8 @@ class UpdateProfileRequest extends FormRequest
         return [
             'name.string' => 'Tên không hợp lệ',
             'name.max' => 'Tên không được vượt quá 255 ký tự',
-            'email.email' => 'Email không hợp lệ',
-            'email.max' => 'Email không được vượt quá 255 ký tự',
+            'phone.string' => 'Số điện thoại không hợp lệ',
+            'phone.max' => 'Số điện thoại không được vượt quá 20 ký tự',
         ];
     }
 

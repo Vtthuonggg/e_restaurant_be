@@ -4,11 +4,9 @@ namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Contracts\Validation\Validator;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Response;
-use Illuminate\Validation\ValidationException;
+use Illuminate\Http\Exceptions\HttpResponseException;
 
-class RegisterRequest extends FormRequest
+class RegisterWithOtpRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -18,36 +16,34 @@ class RegisterRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'email' => 'required|email|max:255|unique:users,email',
+            'otp' => 'required|string|size:6',
             'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:6',
+            'phone' => 'nullable|string|max:20',
         ];
     }
 
     public function messages(): array
     {
         return [
-            'name.required' => 'Tên là bắt buộc',
-            'name.string' => 'Tên không hợp lệ',
-            'name.max' => 'Tên không được vượt quá 255 ký tự',
             'email.required' => 'Email là bắt buộc',
-            'email.string' => 'Email không hợp lệ',
-            'email.max' => 'Email không được vượt quá 255 ký tự',
+            'email.email' => 'Email không hợp lệ',
             'email.unique' => 'Email đã được đăng ký',
+            'otp.required' => 'Mã OTP là bắt buộc',
+            'otp.size' => 'Mã OTP phải có 6 ký tự',
+            'name.required' => 'Tên là bắt buộc',
             'password.required' => 'Mật khẩu là bắt buộc',
-            'password.string' => 'Mật khẩu không hợp lệ',
             'password.min' => 'Mật khẩu phải có ít nhất 6 ký tự',
         ];
     }
 
     protected function failedValidation(Validator $validator)
     {
-        $response = new JsonResponse([
+        throw new HttpResponseException(response()->json([
             'status' => 'error',
             'message' => 'Dữ liệu không hợp lệ',
-            'data' => $validator->errors(),
-        ], Response::HTTP_UNPROCESSABLE_ENTITY);
-
-        throw new ValidationException($validator, $response);
+            'errors' => $validator->errors()
+        ], 422));
     }
 }

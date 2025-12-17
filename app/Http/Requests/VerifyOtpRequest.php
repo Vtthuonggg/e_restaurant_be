@@ -4,11 +4,9 @@ namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Contracts\Validation\Validator;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Response;
-use Illuminate\Validation\ValidationException;
+use Illuminate\Http\Exceptions\HttpResponseException;
 
-class LoginRequest extends FormRequest
+class VerifyOtpRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -18,9 +16,8 @@ class LoginRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'email' => 'required|email',
-            'password' => 'required|string',
-            'is_employee' => 'sometimes|boolean',
+            'email' => 'required|email|max:255',
+            'otp' => 'required|string|size:6',
         ];
     }
 
@@ -29,19 +26,17 @@ class LoginRequest extends FormRequest
         return [
             'email.required' => 'Email là bắt buộc',
             'email.email' => 'Email không hợp lệ',
-            'password.required' => 'Mật khẩu là bắt buộc',
-            'password.string' => 'Mật khẩu không hợp lệ',
+            'otp.required' => 'Mã OTP là bắt buộc',
+            'otp.size' => 'Mã OTP phải có 6 ký tự',
         ];
     }
 
     protected function failedValidation(Validator $validator)
     {
-        $response = new JsonResponse([
+        throw new HttpResponseException(response()->json([
             'status' => 'error',
             'message' => 'Dữ liệu không hợp lệ',
-            'data' => $validator->errors(),
-        ], Response::HTTP_UNPROCESSABLE_ENTITY);
-
-        throw new ValidationException($validator, $response);
+            'errors' => $validator->errors()
+        ], 422));
     }
 }

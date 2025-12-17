@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
 use App\Services\CloudinaryService;
+use App\Services\SmsService;
 
 
 class AppServiceProvider extends ServiceProvider

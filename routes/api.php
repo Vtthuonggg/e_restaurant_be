@@ -12,10 +12,15 @@ use App\Http\Controllers\IngredientController;
 use App\Http\Controllers\AreaController;
 use App\Http\Controllers\RoomController;
 use App\Http\Controllers\OrderController;
-use App\Services\CloudinaryService;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\OtpController;
 
-
+Route::prefix('otp')->group(function () {
+    Route::post('/send', [OtpController::class, 'sendOtp']);
+    Route::post('/verify', [OtpController::class, 'verifyOtp']);
+    Route::post('/resend', [OtpController::class, 'resendOtp']);
+    Route::post('/register', [OtpController::class, 'registerWithOtp']);
+});
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::middleware('auth:sanctum')->group(function () {

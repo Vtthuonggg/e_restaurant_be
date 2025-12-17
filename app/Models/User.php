@@ -20,15 +20,15 @@ class User extends Authenticatable
      */
     protected $fillable = [
         'name',
-        'phone',
-        'email',
+        'email',           // Dùng để đăng nhập
+        'phone',           // Chỉ là thông tin, nullable
         'password',
         'image',
-        'user_type',
         'api_key',
+        'user_type',       // 2: manager, 3: employee
+        'owner_id',
         'store_name',
         'address',
-        'owner_id'
     ];
 
     /**
