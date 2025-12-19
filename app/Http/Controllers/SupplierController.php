@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Http\Requests\CreateSupplierRequest;
 use App\Http\Requests\UpdateSupplierRequest;
-
+use App\Models\User;
 
 class SupplierController extends Controller
 {
@@ -16,7 +16,7 @@ class SupplierController extends Controller
         $perPage = (int) $request->query('per_page', 20);
         $page = (int) $request->query('page', 1);
         $suppliers = Supplier::paginate($perPage);
-        $query = Supplier::where('user_id', Auth::id());
+        $query = Supplier::where('user_id', User::getEffectiveUserId());
         if ($request->filled('name')) {
             $name = $request->query('name');
             $query->where('name', 'like', '%' . $name . '%');
@@ -41,7 +41,7 @@ class SupplierController extends Controller
     public function store(CreateSupplierRequest $request)
     {
         $validated = $request->validated();
-        $validated['user_id'] = Auth::id();
+        $validated['user_id'] = User::getEffectiveUserId();
         $supplier = Supplier::create($validated);
         return response()->json(['status' => 'success', 'data' => $supplier], 201);
     }
@@ -70,7 +70,7 @@ class SupplierController extends Controller
 
     public function destroy($id)
     {
-        $supplier = Supplier::where('user_id', Auth::id())->find($id);
+        $supplier = Supplier::where('user_id', User::getEffectiveUserId())->find($id);
         if (!$supplier) {
             return response()->json(['status' => 'error', 'message' => 'Supplier not found'], 404);
         }

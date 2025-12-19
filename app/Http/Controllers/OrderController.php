@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use App\Http\Requests\CreateOrderRequest;
+use App\Models\User;
 
 class OrderController extends Controller
 {
@@ -18,7 +19,7 @@ class OrderController extends Controller
         $perPage = (int) $request->query('per_page', 20);
         $page = (int) $request->query('page', 1);
 
-        $query = Order::where('user_id', Auth::id())
+        $query = Order::where('user_id', User::getEffectiveUserId())
             ->with(['room.area', 'customer', 'supplier']);
 
         if ($request->has('type')) {
@@ -54,7 +55,7 @@ class OrderController extends Controller
     public function store(CreateOrderRequest $request)
     {
         $validated = $request->validated();
-        $validated['user_id'] = Auth::id();
+        $validated['user_id'] = User::getEffectiveUserId();
         $validated['discount'] = $validated['discount'] ?? 0;
         $validated['discount_type'] = $validated['discount_type'] ?? 1;
         $validated['status_order'] = $validated['status_order'] ?? 2;
@@ -64,7 +65,7 @@ class OrderController extends Controller
             // Type 1: Đơn BÁN
             if ($validated['type'] == 1) {
                 // Validate room thuộc về user
-                $room = Room::where('user_id', Auth::id())->find($validated['room_id']);
+                $room = Room::where('user_id', User::getEffectiveUserId())->find($validated['room_id']);
                 if (!$room) {
                     return response()->json([
                         'status' => 'error',
@@ -115,7 +116,7 @@ class OrderController extends Controller
 
     public function show($id)
     {
-        $order = Order::where('user_id', Auth::id())
+        $order = Order::where('user_id', User::getEffectiveUserId())
             ->with(['room.area', 'customer', 'supplier'])
             ->find($id);
 
@@ -131,7 +132,7 @@ class OrderController extends Controller
 
     public function update(Request $request, $id)
     {
-        $order = Order::where('user_id', Auth::id())->find($id);
+        $order = Order::where('user_id', User::getEffectiveUserId())->find($id);
         if (!$order) {
             return response()->json(['status' => 'error', 'message' => 'Không tìm thấy đơn hàng'], 404);
         }
@@ -168,7 +169,7 @@ class OrderController extends Controller
 
             // Cập nhật room type nếu có (chỉ với đơn bán)
             if ($order->type == 1 && isset($validated['room_id']) && isset($validated['room_type'])) {
-                $room = Room::where('user_id', Auth::id())->find($validated['room_id']);
+                $room = Room::where('user_id', User::getEffectiveUserId())->find($validated['room_id']);
                 if ($room) {
                     $room->update(['type' => $validated['room_type']]);
                 }
@@ -334,10 +335,10 @@ class OrderController extends Controller
         foreach ($orderDetail as $item) {
             if (!isset($item['product_id'])) continue;
 
-            $product = Product::where('user_id', Auth::id())->find($item['product_id']);
+            $product = Product::where('user_id', User::getEffectiveUserId())->find($item['product_id']);
             if ($product && $product->ingredients) {
                 foreach ($product->ingredients as $ingredientData) {
-                    $ingredient = Ingredient::where('user_id', Auth::id())->find($ingredientData['id']);
+                    $ingredient = Ingredient::where('user_id', User::getEffectiveUserId())->find($ingredientData['id']);
                     if ($ingredient) {
                         $quantityToReduce = $ingredientData['quantity'] * $item['quantity'];
 
@@ -358,10 +359,10 @@ class OrderController extends Controller
             // Xử lý topping nếu có
             if (isset($item['topping'])) {
                 foreach ($item['topping'] as $topping) {
-                    $toppingProduct = Product::where('user_id', Auth::id())->find($topping['product_id']);
+                    $toppingProduct = Product::where('user_id', User::getEffectiveUserId())->find($topping['product_id']);
                     if ($toppingProduct && $toppingProduct->ingredients) {
                         foreach ($toppingProduct->ingredients as $ingredientData) {
-                            $ingredient = Ingredient::where('user_id', Auth::id())->find($ingredientData['id']);
+                            $ingredient = Ingredient::where('user_id', User::getEffectiveUserId())->find($ingredientData['id']);
                             if ($ingredient) {
                                 $quantityToReduce = $ingredientData['quantity'] * $topping['quantity'];
 
@@ -391,7 +392,7 @@ class OrderController extends Controller
         foreach ($orderDetail as $item) {
             if (!isset($item['ingredient_id'])) continue;
 
-            $ingredient = Ingredient::where('user_id', Auth::id())->find($item['ingredient_id']);
+            $ingredient = Ingredient::where('user_id', User::getEffectiveUserId())->find($item['ingredient_id']);
             if ($ingredient) {
                 $quantityToAdd = $item['quantity'];
 

@@ -7,6 +7,7 @@ use App\Http\Requests\UpdateCategoryRequest;
 use App\Models\Category;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use App\Models\User;
 
 class CategoryController extends Controller
 {
@@ -15,7 +16,7 @@ class CategoryController extends Controller
         $perPage = (int) $request->query('per_page', 20);
         $page = (int) $request->query('page', 1);
         $categories = Category::paginate($perPage);
-        $query = Category::where('user_id', Auth::id());
+        $query = Category::where('user_id', User::getEffectiveUserId());
         if ($request->filled('name')) {
             $name = $request->query('name');
             $query->where('name', 'like', '%' . $name . '%');
@@ -40,7 +41,7 @@ class CategoryController extends Controller
     {
         $validated = $request->validated();
 
-        $validated['user_id'] = Auth::id();
+        $validated['user_id'] = User::getEffectiveUserId();
         $category = Category::create($validated);
         return response()->json(['status' => 'success', 'data' => $category], 201);
     }

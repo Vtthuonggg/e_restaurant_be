@@ -18,7 +18,7 @@ class LoginRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'email' => 'required|email',
+            'username' => 'required|string',
             'password' => 'required|string',
             'is_employee' => 'sometimes|boolean',
         ];
@@ -27,8 +27,7 @@ class LoginRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'email.required' => 'Email là bắt buộc',
-            'email.email' => 'Email không hợp lệ',
+            'username.required' => 'Tên đăng nhập là bắt buộc',
             'password.required' => 'Mật khẩu là bắt buộc',
             'password.string' => 'Mật khẩu không hợp lệ',
         ];

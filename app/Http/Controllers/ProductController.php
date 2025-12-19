@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Auth;
 use App\Services\CloudinaryService;
 use App\Http\Requests\CreateProductRequest;
 use App\Http\Requests\UpdateProductRequest;
+use App\Models\User;
 
 class ProductController extends Controller
 {
@@ -23,8 +24,8 @@ class ProductController extends Controller
     {
         $perPage = (int) $request->query('per_page', 20);
         $page = (int) $request->query('page', 1);
-
-        $query = Product::where('user_id', Auth::id());
+        $userId = User::getEffectiveUserId();
+        $query = Product::where('user_id', $userId);
 
         // Filter name TRƯỚC khi paginate
         if ($request->filled('name')) {
@@ -53,7 +54,7 @@ class ProductController extends Controller
                     $ids = is_array($product->category_ids) ? $product->category_ids : json_decode($product->category_ids, true);
                     if (is_array($ids) && count($ids) > 0) {
                         $cats = \App\Models\Category::whereIn('id', $ids)
-                            ->where('user_id', Auth::id())
+                            ->where('user_id', User::getEffectiveUserId())
                             ->get();
                         $product->setRelation('categories', $cats);
                     } else {
@@ -110,12 +111,12 @@ class ProductController extends Controller
 
         $validated['retail_cost'] = $validated['retail_cost'] ?? 0;
         $validated['base_cost'] = $validated['base_cost'] ?? 0; // Thêm dòng này
-        $validated['user_id'] = Auth::id();
+        $validated['user_id'] = User::getEffectiveUserId();
 
         $product = Product::create($validated);
 
         if ($request->has('category_ids')) {
-            $userCategoryIds = \App\Models\Category::where('user_id', Auth::id())
+            $userCategoryIds = \App\Models\Category::where('user_id', User::getEffectiveUserId())
                 ->whereIn('id', $request->category_ids)
                 ->pluck('id')
                 ->toArray();
@@ -129,7 +130,7 @@ class ProductController extends Controller
 
     public function show($id)
     {
-        $product = Product::where('user_id', Auth::id())->find($id);
+        $product = Product::where('user_id', User::getEffectiveUserId())->find($id);
         if (!$product) {
             return response()->json(['status' => 'error', 'message' => 'Không tìm thấy sản phẩm'], 404);
         }
@@ -142,7 +143,7 @@ class ProductController extends Controller
 
     public function update(UpdateProductRequest $request, $id)
     {
-        $product = Product::where('user_id', Auth::id())->find($id);
+        $product = Product::where('user_id', User::getEffectiveUserId())->find($id);
         if (!$product) {
             return response()->json(['status' => 'error', 'message' => 'Không tìm thấy sản phẩm'], 404);
         }
@@ -160,7 +161,7 @@ class ProductController extends Controller
         }
 
         if ($request->has('category_ids')) {
-            $userCategoryIds = \App\Models\Category::where('user_id', Auth::id())
+            $userCategoryIds = \App\Models\Category::where('user_id', User::getEffectiveUserId())
                 ->whereIn('id', $request->category_ids)
                 ->pluck('id')
                 ->toArray();
@@ -175,7 +176,7 @@ class ProductController extends Controller
 
     public function destroy($id)
     {
-        $product = Product::where('user_id', Auth::id())->find($id);
+        $product = Product::where('user_id', User::getEffectiveUserId())->find($id);
         if (!$product) {
             return response()->json(['status' => 'error', 'message' => 'Không tìm thấy sản phẩm'], 404);
         }

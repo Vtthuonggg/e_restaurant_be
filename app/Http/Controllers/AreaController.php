@@ -8,15 +8,14 @@ use App\Models\Room;
 use Illuminate\Support\Facades\DB;
 use App\Http\Requests\CreateAreaRequest;
 use App\Http\Requests\UpdateAreaRequest;
-
-
+use App\Models\User;
 
 class AreaController extends Controller
 {
 
     public function index()
     {
-        $areas = Area::where('user_id', Auth::id())->get();
+        $areas = Area::where('user_id', User::getEffectiveUserId())->get();
         return response()->json([
             'success' => true,
             'status' => 200,
@@ -29,7 +28,7 @@ class AreaController extends Controller
     public function store(CreateAreaRequest $request)
     {
         $validated = $request->validated();
-        $validated['user_id'] = Auth::id();
+        $validated['user_id'] = User::getEffectiveUserId();
         $area = Area::create($validated);
         return response()->json(
             [
@@ -45,14 +44,14 @@ class AreaController extends Controller
 
     public function show(string $id)
     {
-        $area = Area::where('user_id', Auth::id())->find($id);
+        $area = Area::where('user_id', User::getEffectiveUserId())->find($id);
         if (!$area) return response()->json(['message' => 'Not found'], 404);
         return response()->json($area);
     }
 
     public function update(UpdateAreaRequest $request, string $id)
     {
-        $area = Area::where('user_id', Auth::id())->find($id);
+        $area = Area::where('user_id', User::getEffectiveUserId())->find($id);
         if (!$area) return response()->json(['message' => 'Not found'], 404);
         $validated = $request->validated();
         $area->update($validated);
@@ -62,11 +61,11 @@ class AreaController extends Controller
 
     public function destroy(string $id)
     {
-        $area = Area::where('user_id', Auth::id())->find($id);
+        $area = Area::where('user_id', User::getEffectiveUserId())->find($id);
         if (!$area) return response()->json(['message' => 'Not found'], 404);
 
         DB::transaction(function () use ($area) {
-            Room::where('area_id', $area->id)->where('user_id', Auth::id())->delete();
+            Room::where('area_id', $area->id)->where('user_id', User::getEffectiveUserId())->delete();
             $area->delete();
         });
         return response()->json(['message' => 'Deleted']);

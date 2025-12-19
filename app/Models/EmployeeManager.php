@@ -36,4 +36,10 @@ class EmployeeManager extends Model
     {
         return $query->where('user_id', $managerId);
     }
+
+    // ✅ Thêm scope này
+    public function scopeForUser($query, $userId)
+    {
+        return $query->where('user_id', $userId);
+    }
 }

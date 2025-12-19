@@ -18,7 +18,7 @@ class EmployeeController extends Controller
         $perPage = (int) $request->query('per_page', 20);
         $page = (int) $request->query('page', 1);
 
-        $query = EmployeeManager::forUser(Auth::id())
+        $query = EmployeeManager::forUser(User::getEffectiveUserId())
             ->with(['employee']);
 
         if ($request->filled('name')) {
@@ -61,9 +61,10 @@ class EmployeeController extends Controller
 
         DB::beginTransaction();
         try {
-            // Tạo user mới với user_type = 3
+            $email = $validated['phone'] . '@employee.local';
             $employee = User::create([
                 'name' => $validated['name'],
+                'email' => $email,
                 'phone' => $validated['phone'],
                 'password' => isset($validated['password']) ? Hash::make($validated['password']) : null,
                 'user_type' => 3
@@ -71,7 +72,7 @@ class EmployeeController extends Controller
 
             // Tạo quan hệ trong bảng employee_manager
             EmployeeManager::create([
-                'user_id' => Auth::id(),
+                'user_id' => User::getEffectiveUserId(),
                 'employee_id' => $employee->id,
                 'role' => $validated['role'] ?? 'employee'
             ]);
@@ -90,7 +91,7 @@ class EmployeeController extends Controller
 
     public function show($id)
     {
-        $relation = EmployeeManager::forUser(Auth::id())
+        $relation = EmployeeManager::forUser(User::getEffectiveUserId())
             ->with(['employee'])
             ->whereHas('employee', function ($q) use ($id) {
                 $q->where('id', $id);
@@ -116,7 +117,7 @@ class EmployeeController extends Controller
             'role' => 'sometimes|string|in:employee,supervisor,cashier,chef',
         ]);
 
-        $relation = EmployeeManager::forUser(Auth::id())
+        $relation = EmployeeManager::forUser(User::getEffectiveUserId())
             ->whereHas('employee', function ($q) use ($id) {
                 $q->where('id', $id);
             })
@@ -157,7 +158,7 @@ class EmployeeController extends Controller
 
     public function destroy($id)
     {
-        $relation = EmployeeManager::forUser(Auth::id())
+        $relation = EmployeeManager::forUser(User::getEffectiveUserId())
             ->whereHas('employee', function ($q) use ($id) {
                 $q->where('id', $id);
             })

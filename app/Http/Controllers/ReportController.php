@@ -28,7 +28,7 @@ class ReportController extends Controller
         $start = $validated['start'] ?? $defaultStart;
         $end = $validated['end'] ?? $defaultEnd;
 
-        $query = Order::where('user_id', Auth::id())
+        $query = Order::where('user_id', User::getEffectiveUserId())
             ->where('type', 1) // Chỉ lấy đơn bán
             ->where('status_order', 1) // Chỉ lấy đơn hoàn thành
             ->whereBetween('created_at', [
@@ -112,7 +112,7 @@ class ReportController extends Controller
         $start = $validated['start'] ?? $defaultStart;
         $end = $validated['end'] ?? $defaultEnd;
 
-        $orders = Order::where('user_id', Auth::id())
+        $orders = Order::where('user_id', User::getEffectiveUserId())
             ->where('type', 1) // Chỉ đơn bán
             ->where('status_order', 1) // Chỉ đơn hoàn thành
             ->whereBetween('created_at', [
@@ -208,7 +208,7 @@ class ReportController extends Controller
         $start = $validated['start'] ?? $defaultStart;
         $end = $validated['end'] ?? $defaultEnd;
 
-        $orders = Order::where('user_id', Auth::id())
+        $orders = Order::where('user_id', User::getEffectiveUserId())
             ->where('type', 2) // Chỉ đơn nhập
             ->where('status_order', 1) // Chỉ đơn hoàn thành
             ->whereBetween('created_at', [
@@ -279,7 +279,7 @@ class ReportController extends Controller
         $end = $validated['end'] ?? $defaultEnd;
 
         // Doanh thu bán hàng
-        $salesOrders = Order::where('user_id', Auth::id())
+        $salesOrders = Order::where('user_id', User::getEffectiveUserId())
             ->where('type', 1)
             ->where('status_order', 1)
             ->whereBetween('created_at', [
@@ -303,7 +303,7 @@ class ReportController extends Controller
         }
 
         // Chi phí nhập hàng
-        $purchaseOrders = Order::where('user_id', Auth::id())
+        $purchaseOrders = Order::where('user_id', User::getEffectiveUserId())
             ->where('type', 2)
             ->where('status_order', 1)
             ->whereBetween('created_at', [
@@ -320,7 +320,7 @@ class ReportController extends Controller
         }
 
         // Số đơn chờ xác nhận
-        $pendingOrders = Order::where('user_id', Auth::id())
+        $pendingOrders = Order::where('user_id', User::getEffectiveUserId())
             ->where('status_order', 2)
             ->count();
 

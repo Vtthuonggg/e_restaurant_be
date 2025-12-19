@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use Illuminate\Support\Facades\Auth;
+
 
 class User extends Authenticatable
 {
@@ -96,5 +98,27 @@ class User extends Authenticatable
     public function managerEmployeeRelation()
     {
         return $this->hasMany(EmployeeManager::class, 'user_id');
+    }
+    public static function getEffectiveUserId()
+    {
+        /** @var User|null $user */
+        $user = Auth::user();
+
+        if (!$user) {
+            return null;
+        }
+
+        // Owner: dùng chính ID của mình
+        if ($user->user_type == 2) {
+            return $user->id;
+        }
+
+        // Employee: lấy ID của owner
+        if ($user->user_type == 3) {
+            $relation = $user->employeeManagerRelation()->first();
+            return $relation ? $relation->user_id : null;
+        }
+
+        return null;
     }
 }

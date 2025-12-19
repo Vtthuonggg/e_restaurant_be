@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Auth;
 use App\Services\CloudinaryService;
 use App\Http\Requests\CreateIngredientRequest;
 use App\Http\Requests\UpdateIngredientRequest;
+use App\Models\User;
 
 class IngredientController extends Controller
 {
@@ -25,7 +26,7 @@ class IngredientController extends Controller
         $perPage = (int) $request->query('per_page', 20);
         $page = (int) $request->query('page', 1);
         $ingredients = Ingredient::paginate($perPage);
-        $query = Ingredient::where('user_id', Auth::id());
+        $query = Ingredient::where('user_id', User::getEffectiveUserId());
 
         $total = $query->count();
         $ingredients = $query->paginate($perPage, ['*'], 'page', $page);
@@ -54,14 +55,14 @@ class IngredientController extends Controller
         $validated['base_cost'] = $validated['base_cost'] ?? 0;
         $validated['retail_cost'] = $validated['retail_cost'] ?? 0;
         $validated['in_stock'] = $validated['in_stock'] ?? 0;
-        $validated['user_id'] = Auth::id();
+        $validated['user_id'] = User::getEffectiveUserId();
         $ingredient = Ingredient::create($validated);
         return response()->json(['status' => 'success', 'data' => $ingredient], 201);
     }
 
     public function show($id)
     {
-        $ingredient = Ingredient::where('user_id', Auth::id())->find($id);
+        $ingredient = Ingredient::where('user_id', User::getEffectiveUserId())->find($id);
         if (!$ingredient) {
             return response()->json(['status' => 'error', 'message' => 'Không tìm thấy nguyên liệu'], 404);
         }
@@ -70,7 +71,7 @@ class IngredientController extends Controller
 
     public function update(UpdateIngredientRequest $request, $id)
     {
-        $ingredient = Ingredient::where('user_id', Auth::id())->find($id);
+        $ingredient = Ingredient::where('user_id', User::getEffectiveUserId())->find($id);
         if (!$ingredient) {
             return response()->json(['status' => 'error', 'message' => 'Không tìm thấy nguyên liệu'], 404);
         }
@@ -96,7 +97,7 @@ class IngredientController extends Controller
 
     public function destroy($id)
     {
-        $ingredient = Ingredient::where('user_id', Auth::id())->find($id);
+        $ingredient = Ingredient::where('user_id', User::getEffectiveUserId())->find($id);
         if (!$ingredient) {
             return response()->json(['status' => 'error', 'message' => 'Không tìm thấy nguyên liệu'], 404);
         }

@@ -9,6 +9,7 @@ use App\Http\Requests\CreateCustomerRequest;
 use App\Http\Requests\UpdateCustomerRequest;
 use Illuminate\Support\Facades\Log;
 use Termwind\Components\Raw;
+use App\Models\User;
 
 class CustomerController extends Controller
 {
@@ -18,7 +19,7 @@ class CustomerController extends Controller
         $page = (int) $request->query('page', 1);
         $customers = Customer::paginate($perPage);
 
-        $query = Customer::where('user_id', Auth::id());
+        $query = Customer::where('user_id', User::getEffectiveUserId());
         if ($request->filled('name')) {
             $name = $request->query('name');
             $query->where('name', 'like', '%' . $name . '%');
@@ -43,7 +44,7 @@ class CustomerController extends Controller
     public function store(CreateCustomerRequest $request)
     {
         $validated = $request->validated();
-        $validated['user_id'] = Auth::id();
+        $validated['user_id'] = User::getEffectiveUserId();
         $customer = Customer::create($validated);
         return response()->json(['status' => 'success', 'data' => $customer], 201);
     }
