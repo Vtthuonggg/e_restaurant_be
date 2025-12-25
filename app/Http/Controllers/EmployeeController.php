@@ -28,9 +28,6 @@ class EmployeeController extends Controller
             });
         }
 
-        if ($request->filled('role')) {
-            $query->where('role', $request->query('role'));
-        }
 
         $total = $query->count();
         $employeeRelations = $query->paginate($perPage, ['*'], 'page', $page);
@@ -62,25 +59,28 @@ class EmployeeController extends Controller
         DB::beginTransaction();
         try {
             $email = $validated['phone'] . '@employee.local';
-            $employee = User::create([
+
+            $employeeData = [
                 'name' => $validated['name'],
                 'email' => $email,
                 'phone' => $validated['phone'],
-                'password' => isset($validated['password']) ? Hash::make($validated['password']) : null,
                 'user_type' => 3
-            ]);
+            ];
+
+            // Chỉ thêm password nếu được cung cấp
+            if (isset($validated['password']) && !empty($validated['password'])) {
+                $employeeData['password'] = Hash::make($validated['password']);
+            }
+
+            $employee = User::create($employeeData);
 
             // Tạo quan hệ trong bảng employee_manager
             EmployeeManager::create([
                 'user_id' => User::getEffectiveUserId(),
                 'employee_id' => $employee->id,
-                'role' => $validated['role'] ?? 'employee'
             ]);
 
             DB::commit();
-
-            // Gán role để trả về
-            $employee->role = $validated['role'] ?? 'employee';
 
             return response()->json(['status' => 'success', 'data' => $employee], 201);
         } catch (\Exception $e) {
@@ -88,7 +88,6 @@ class EmployeeController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Lỗi khi tạo nhân viên: ' . $e->getMessage()], 500);
         }
     }
-
     public function show($id)
     {
         $relation = EmployeeManager::forUser(User::getEffectiveUserId())
@@ -108,15 +107,9 @@ class EmployeeController extends Controller
         return response()->json(['status' => 'success', 'data' => $employee]);
     }
 
-    public function update(Request $request, $id)
+    public function update(UpdateEmployeeRequest $request, $id)
     {
-        $validated = $request->validate([
-            'name' => 'sometimes|required|string|max:255',
-            'phone' => 'sometimes|required|string|max:20|unique:users,phone,' . $id,
-            'password' => 'nullable|string|min:6',
-            'role' => 'sometimes|string|in:employee,supervisor,cashier,chef',
-        ]);
-
+        $validated = $request->validated();
         $relation = EmployeeManager::forUser(User::getEffectiveUserId())
             ->whereHas('employee', function ($q) use ($id) {
                 $q->where('id', $id);
@@ -139,10 +132,7 @@ class EmployeeController extends Controller
                 $relation->employee->update($updateData);
             }
 
-            // Cập nhật role nếu có
-            if (isset($validated['role'])) {
-                $relation->update(['role' => $validated['role']]);
-            }
+
 
             DB::commit();
 

@@ -19,7 +19,6 @@ class CreateEmployeeRequest extends FormRequest
             'name' => 'required|string|max:255',
             'phone' => 'required|string|max:20|unique:users,phone',
             'password' => 'nullable|string|min:6',
-            'role' => 'sometimes|string|in:employee,supervisor,cashier,chef',
         ];
     }
 
@@ -35,8 +34,6 @@ class CreateEmployeeRequest extends FormRequest
             'phone.unique' => 'Số điện thoại đã tồn tại',
             'password.string' => 'Mật khẩu phải là chuỗi ký tự',
             'password.min' => 'Mật khẩu phải có ít nhất 6 ký tự',
-            'role.string' => 'Vai trò phải là chuỗi ký tự',
-            'role.in' => 'Vai trò không hợp lệ. Chọn: employee, supervisor, cashier, chef',
         ];
     }
 

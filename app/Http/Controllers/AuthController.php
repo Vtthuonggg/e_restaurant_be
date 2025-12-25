@@ -56,7 +56,12 @@ class   AuthController extends Controller
                 ->where('user_type', 3)
                 ->whereHas('employeeManagerRelation')
                 ->first();
-
+            if (empty($employee->password)) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Tài khoản chưa được kích hoạt. Vui lòng liên hệ quản lý.'
+                ], 401);
+            }
             if (!$employee || !Hash::check($data['password'], $employee->password)) {
                 return response()->json([
                     'status' => 'error',
