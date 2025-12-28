@@ -110,9 +110,11 @@ class ProductController extends Controller
         $validated = $request->validated();
 
         $validated['retail_cost'] = $validated['retail_cost'] ?? 0;
-        $validated['base_cost'] = $validated['base_cost'] ?? 0; // Thêm dòng này
+        $validated['base_cost'] = $validated['base_cost'] ?? 0;
+        unset($validated['user_id']);
+        //log ra user id
+        \Illuminate\Support\Facades\Log::info('User id: ' . User::getEffectiveUserId());
         $validated['user_id'] = User::getEffectiveUserId();
-
         $product = Product::create($validated);
 
         if ($request->has('category_ids')) {

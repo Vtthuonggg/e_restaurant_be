@@ -13,13 +13,16 @@ class Product extends Model
         'image',
         'unit',
         'category_ids',
-        'ingredients'
+        'ingredients',
+        'user_id'
     ];
 
     protected $casts = [
         'category_ids' => 'array',
         'ingredients' => 'array',
         'retail_cost' => 'integer',
+        'base_cost' => 'integer',
+        'user_id' => 'integer',
     ];
 
     public function categories()
