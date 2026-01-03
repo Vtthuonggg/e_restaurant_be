@@ -53,5 +53,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/product-sales', [ReportController::class, 'productSalesReport']);
         Route::get('/ingredient-purchase', [ReportController::class, 'ingredientPurchaseReport']);
         Route::get('/dashboard', [ReportController::class, 'dashboardReport']);
+        Route::get('/quick-stats', [ReportController::class, 'quickStats']);
     });
 });

@@ -26,7 +26,7 @@ class RoomController extends Controller
                 // Tìm order chưa hoàn thành (status_order = 2) và load customer
                 $order = Order::with('customer')
                     ->where('room_id', $room->id)
-                    ->where('status_order', 2)
+                    ->where('status_order', 1)
                     ->where('user_id', User::getEffectiveUserId())
                     ->orderBy('created_at', 'desc')
                     ->first();

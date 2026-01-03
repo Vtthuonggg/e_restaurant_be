@@ -8,6 +8,7 @@ use App\Models\Ingredient;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
+use App\Models\User;
 
 class ReportController extends Controller
 {
@@ -339,5 +340,82 @@ class ReportController extends Controller
                 ]
             ]
         ]);
+    }
+
+
+
+    public function quickStats()
+    {
+        $userId = User::getEffectiveUserId();
+        $now = Carbon::now();
+
+        // Hôm nay
+        $todayStart = $now->copy()->startOfDay();
+        $todayEnd = $now->copy()->endOfDay();
+
+        $todayRevenue = $this->calculateRevenue($userId, $todayStart, $todayEnd);
+
+
+        $weekStart = $now->copy()->startOfWeek();
+        $weekEnd = $now->copy()->endOfDay();
+
+        $weekRevenue = $this->calculateRevenue($userId, $weekStart, $weekEnd);
+
+        // Tháng này
+        $monthStart = $now->copy()->startOfMonth();
+        $monthEnd = $now->copy()->endOfDay();
+
+        $monthRevenue = $this->calculateRevenue($userId, $monthStart, $monthEnd);
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'today' => [
+                    'revenue' => $todayRevenue,
+                    'date' => $todayStart->format('Y-m-d')
+                ],
+                'this_week' => [
+                    'revenue' => $weekRevenue,
+                    'start_date' => $weekStart->format('Y-m-d'),
+                    'end_date' => $now->format('Y-m-d')
+                ],
+                'this_month' => [
+                    'revenue' => $monthRevenue,
+                    'start_date' => $monthStart->format('Y-m-d'),
+                    'end_date' => $now->format('Y-m-d')
+                ]
+            ]
+        ]);
+    }
+
+    /**
+     * Tính doanh thu trong khoảng thời gian
+     */
+    private function calculateRevenue($userId, $start, $end)
+    {
+        $orders = Order::where('user_id', $userId)
+            ->where('type', 1) // Chỉ đơn bán
+            ->where('status_order', 1) // Chỉ đơn hoàn thành
+            ->whereBetween('created_at', [$start, $end])
+            ->get();
+
+        $totalRevenue = 0;
+
+        foreach ($orders as $order) {
+            if (isset($order->payment)) {
+                // Nếu payment là array of payments
+                if (is_array($order->payment) && isset($order->payment[0])) {
+                    foreach ($order->payment as $payment) {
+                        $totalRevenue += $payment['price'] ?? 0;
+                    }
+                }
+                // Nếu payment là object đơn
+                else if (isset($order->payment['price'])) {
+                    $totalRevenue += $order->payment['price'];
+                }
+            }
+        }
+
+        return round($totalRevenue, 2);
     }
 }
