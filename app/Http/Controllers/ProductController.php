@@ -26,6 +26,9 @@ class ProductController extends Controller
         $page = (int) $request->query('page', 1);
         $userId = User::getEffectiveUserId();
         $query = Product::where('user_id', $userId);
+        if ($request->has('is_topping')) {
+            $query->where('is_topping', $request->boolean('is_topping'));
+        }
 
         // Filter name TRƯỚC khi paginate
         if ($request->filled('name')) {
@@ -108,12 +111,10 @@ class ProductController extends Controller
     public function store(CreateProductRequest $request)
     {
         $validated = $request->validated();
-
+        $validated['is_topping'] = $validated['is_topping'] ?? false;
         $validated['retail_cost'] = $validated['retail_cost'] ?? 0;
         $validated['base_cost'] = $validated['base_cost'] ?? 0;
         unset($validated['user_id']);
-        //log ra user id
-        \Illuminate\Support\Facades\Log::info('User id: ' . User::getEffectiveUserId());
         $validated['user_id'] = User::getEffectiveUserId();
         $product = Product::create($validated);
 

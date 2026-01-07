@@ -17,7 +17,6 @@ class ReportController extends Controller
      */
     public function revenueReport(Request $request)
     {
-        // Mặc định từ đầu tháng đến ngày hiện tại
         $defaultStart = Carbon::now()->startOfMonth()->format('Y-m-d');
         $defaultEnd = Carbon::now()->format('Y-m-d');
 
@@ -29,57 +28,24 @@ class ReportController extends Controller
         $start = $validated['start'] ?? $defaultStart;
         $end = $validated['end'] ?? $defaultEnd;
 
-        $query = Order::where('user_id', User::getEffectiveUserId())
-            ->where('type', 1) // Chỉ lấy đơn bán
-            ->where('status_order', 1) // Chỉ lấy đơn hoàn thành
+        // Lấy các order hoàn thành trong khoảng
+        $orders = Order::where('user_id', User::getEffectiveUserId())
+            ->where('type', 1) // chỉ đơn bán
+            ->where('status_order', 1) // hoàn thành
             ->whereBetween('created_at', [
                 $start . ' 00:00:00',
                 $end . ' 23:59:59'
-            ]);
+            ])->get();
 
-        $orders = $query->get();
-
-        $totalRevenue = 0;
-        $totalDiscount = 0;
         $totalOrders = $orders->count();
 
-        foreach ($orders as $order) {
-            // Tính tổng giá trị đơn hàng
-            $orderTotal = 0;
-            foreach ($order->order_detail as $item) {
-                $itemTotal = $item['price'] * $item['quantity'];
+        // Doanh thu thực tế lấy từ payment.price
+        $totalRevenue = $this->calculateRevenue(User::getEffectiveUserId(), $start . ' 00:00:00', $end . ' 23:59:59');
 
-                // Trừ discount của item
-                if (isset($item['discount']) && $item['discount'] > 0) {
-                    if ($item['discount_type'] == 1) { // %
-                        $itemTotal = $itemTotal * (1 - $item['discount'] / 100);
-                    } else { // VNĐ
-                        $itemTotal = $itemTotal - $item['discount'];
-                    }
-                }
-
-                $orderTotal += $itemTotal;
-
-                // Cộng topping
-                if (isset($item['topping'])) {
-                    foreach ($item['topping'] as $topping) {
-                        $orderTotal += $topping['price'] * $topping['quantity'];
-                    }
-                }
-            }
-
-            // Trừ discount của đơn hàng
-            if ($order->discount > 0) {
-                if ($order->discount_type == 1) { // %
-                    $orderTotal = $orderTotal * (1 - $order->discount / 100);
-                } else { // VNĐ
-                    $orderTotal = $orderTotal - $order->discount;
-                }
-                $totalDiscount += $order->discount;
-            }
-
-            $totalRevenue += $orderTotal;
-        }
+        // Tổng giảm giá lấy từ order-level discount (nếu cần)
+        $totalDiscount = $orders->sum(function ($order) {
+            return (float) ($order->discount ?? 0);
+        });
 
         return response()->json([
             'success' => true,
@@ -95,7 +61,6 @@ class ReportController extends Controller
             ]
         ]);
     }
-
     /**
      * Thống kê món ăn đã bán
      */
@@ -223,7 +188,7 @@ class ReportController extends Controller
 
         foreach ($orders as $order) {
             foreach ($order->order_detail as $item) {
-                $ingredientId = $item['product_id']; // Trong đơn nhập, product_id là ingredient_id
+                $ingredientId = $item['ingredient_id']; // Trong đơn nhập, product_id là ingredient_id
 
                 if (!isset($ingredientStats[$ingredientId])) {
                     $ingredient = Ingredient::find($ingredientId);
@@ -267,7 +232,6 @@ class ReportController extends Controller
      */
     public function dashboardReport(Request $request)
     {
-        // Mặc định từ đầu tháng đến ngày hiện tại
         $defaultStart = Carbon::now()->startOfMonth()->format('Y-m-d');
         $defaultEnd = Carbon::now()->format('Y-m-d');
 
@@ -279,31 +243,10 @@ class ReportController extends Controller
         $start = $validated['start'] ?? $defaultStart;
         $end = $validated['end'] ?? $defaultEnd;
 
-        // Doanh thu bán hàng
-        $salesOrders = Order::where('user_id', User::getEffectiveUserId())
-            ->where('type', 1)
-            ->where('status_order', 1)
-            ->whereBetween('created_at', [
-                $start . ' 00:00:00',
-                $end . ' 23:59:59'
-            ])
-            ->get();
+        // Doanh thu bán hàng (từ payment.price)
+        $totalRevenue = $this->calculateRevenue(User::getEffectiveUserId(), $start . ' 00:00:00', $end . ' 23:59:59');
 
-        $totalRevenue = 0;
-        foreach ($salesOrders as $order) {
-            $orderTotal = 0;
-            foreach ($order->order_detail as $item) {
-                $orderTotal += $item['price'] * $item['quantity'];
-                if (isset($item['topping'])) {
-                    foreach ($item['topping'] as $topping) {
-                        $orderTotal += $topping['price'] * $topping['quantity'];
-                    }
-                }
-            }
-            $totalRevenue += $orderTotal;
-        }
-
-        // Chi phí nhập hàng
+        // Chi phí nhập hàng (vẫn dùng order_detail.price nếu order nhập lưu ở đó)
         $purchaseOrders = Order::where('user_id', User::getEffectiveUserId())
             ->where('type', 2)
             ->where('status_order', 1)
@@ -316,11 +259,12 @@ class ReportController extends Controller
         $totalPurchaseCost = 0;
         foreach ($purchaseOrders as $order) {
             foreach ($order->order_detail as $item) {
-                $totalPurchaseCost += $item['price'] * $item['quantity'];
+                $price = $item['price'] ?? 0;
+                $qty = $item['quantity'] ?? 0;
+                $totalPurchaseCost += $price * $qty;
             }
         }
 
-        // Số đơn chờ xác nhận
         $pendingOrders = Order::where('user_id', User::getEffectiveUserId())
             ->where('status_order', 2)
             ->count();
@@ -331,7 +275,7 @@ class ReportController extends Controller
                 'total_revenue' => $totalRevenue,
                 'total_purchase_cost' => $totalPurchaseCost,
                 'profit' => $totalRevenue - $totalPurchaseCost,
-                'total_sales_orders' => $salesOrders->count(),
+                'total_sales_orders' => Order::where('user_id', User::getEffectiveUserId())->where('type', 1)->where('status_order', 1)->count(),
                 'total_purchase_orders' => $purchaseOrders->count(),
                 'pending_orders' => $pendingOrders,
                 'period' => [
@@ -341,7 +285,6 @@ class ReportController extends Controller
             ]
         ]);
     }
-
 
 
     public function quickStats()
@@ -417,5 +360,113 @@ class ReportController extends Controller
         }
 
         return round($totalRevenue, 2);
+    }
+    /**
+     * Báo cáo thu chi (phiếu thu từ đơn bán, phiếu chi từ đơn nhập)
+     */
+    public function incomeExpenseReport(Request $request)
+    {
+        $defaultStart = Carbon::now()->startOfMonth()->format('Y-m-d');
+        $defaultEnd = Carbon::now()->format('Y-m-d');
+
+        $validated = $request->validate([
+            'start' => 'nullable|date',
+            'end' => 'nullable|date|after_or_equal:start',
+        ]);
+
+        $start = $validated['start'] ?? $defaultStart;
+        $end = $validated['end'] ?? $defaultEnd;
+
+        // Lấy tất cả đơn hàng đã hoàn thành (cả bán và nhập) trong khoảng thời gian
+        $orders = Order::where('user_id', User::getEffectiveUserId())
+            ->where('status_order', 1) // Chỉ đơn hoàn thành
+            ->whereBetween('created_at', [
+                $start . ' 00:00:00',
+                $end . ' 23:59:59'
+            ])
+            ->with(['customer', 'supplier'])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $transactions = [];
+        $totalIncome = 0;  // Tổng thu (từ đơn bán - type 1)
+        $totalExpense = 0; // Tổng chi (từ đơn nhập - type 2)
+
+        foreach ($orders as $order) {
+            // Lấy số tiền từ payment
+            $amount = 0;
+            if (isset($order->payment)) {
+                // Nếu payment là array of payments
+                if (is_array($order->payment) && isset($order->payment[0])) {
+                    foreach ($order->payment as $payment) {
+                        $amount += $payment['price'] ?? 0;
+                    }
+                }
+                // Nếu payment là object đơn
+                else if (is_array($order->payment) && isset($order->payment['price'])) {
+                    $amount = $order->payment['price'];
+                }
+            }
+
+            // Lấy payment_type (ưu tiên payment đầu tiên nếu là array)
+            $paymentType = null;
+            if (isset($order->payment)) {
+                if (is_array($order->payment) && isset($order->payment[0]['type'])) {
+                    $paymentType = $order->payment[0]['type'];
+                } else if (is_array($order->payment) && isset($order->payment['type'])) {
+                    $paymentType = $order->payment['type'];
+                }
+            }
+
+            // Lấy tên customer (đơn bán) hoặc supplier (đơn nhập)
+            $name = null;
+            if ($order->type == 1 && $order->customer) {
+                $name = $order->customer->name;
+            } else if ($order->type == 2 && $order->supplier) {
+                $name = $order->supplier->name;
+            }
+
+            // Phân loại thu/chi
+            if ($order->type == 1) {
+                $totalIncome += $amount;
+            } else if ($order->type == 2) {
+                $totalExpense += $amount;
+            }
+
+            // Map payment_type sang tên dễ hiểu
+            $paymentTypeName = match ($paymentType) {
+                1 => 'Tiền mặt',
+                2 => 'Chuyển khoản',
+                3 => 'Thẻ',
+                default => null
+            };
+
+            $transactions[] = [
+                'id' => $order->id,
+                'type' => $order->type, // 1: Thu (đơn bán), 2: Chi (đơn nhập)
+                'type_name' => $order->type == 1 ? 'Phiếu thu' : 'Phiếu chi',
+                'created_date' => $order->created_at->format('Y-m-d H:i:s'),
+                'amount' => $amount,
+                'name' => $name,
+                'payment_type' => $paymentType,
+                'payment_type_name' => $paymentTypeName,
+                'note' => $order->note ?? null,
+            ];
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => $transactions,
+            'meta' => [
+                'total_income' => round($totalIncome, 2),
+                'total_expense' => round($totalExpense, 2),
+                'net_profit' => round($totalIncome - $totalExpense, 2),
+                'total_transactions' => count($transactions),
+                'period' => [
+                    'start' => $start,
+                    'end' => $end
+                ]
+            ]
+        ]);
     }
 }

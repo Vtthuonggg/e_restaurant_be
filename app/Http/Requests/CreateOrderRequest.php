@@ -21,7 +21,7 @@ class CreateOrderRequest extends FormRequest
             'discount' => 'sometimes|numeric|min:0',
             'discount_type' => 'sometimes|integer|in:1,2',
             'status_order' => 'sometimes|integer|in:1,2',
-            'payment' => 'required|array',
+            'payment' => 'required',
             'payment.type' => 'required|integer|in:1,2,3',
             'payment.price' => 'required|numeric|min:0',
             'order_detail' => 'required|array|min:1',
@@ -39,14 +39,13 @@ class CreateOrderRequest extends FormRequest
                 'order_detail.*.product_id' => 'required|integer|exists:products,id',
                 'order_detail.*.ingredient_id' => 'nullable', // Không dùng ingredient_id
                 'order_detail.*.quantity' => 'required|numeric|min:0.1',
-                'order_detail.*.user_price' => 'required|numeric|min:0',
+                'order_detail.*.price' => 'required|numeric|min:0',
                 'order_detail.*.discount' => 'sometimes|numeric|min:0',
                 'order_detail.*.discount_type' => 'sometimes|integer|in:1,2',
                 'order_detail.*.note' => 'nullable|string',
                 'order_detail.*.topping' => 'sometimes|array',
                 'order_detail.*.topping.*.product_id' => 'required|integer|exists:products,id',
                 'order_detail.*.topping.*.quantity' => 'required|numeric|min:0.1',
-                'order_detail.*.topping.*.user_price' => 'required|numeric|min:0',
             ]);
         }
 
@@ -56,13 +55,13 @@ class CreateOrderRequest extends FormRequest
                 'room_id' => 'nullable', // Không cần room
                 'room_type' => 'nullable',
                 'customer_id' => 'nullable', // Không cần customer
-                'supplier_id' => 'required|integer|exists:suppliers,id',
+                'supplier_id' => 'nullable',
 
                 // Order detail cho đơn nhập (ingredient)
                 'order_detail.*.ingredient_id' => 'required|integer|exists:ingredients,id',
                 'order_detail.*.product_id' => 'nullable', // Không dùng product_id
                 'order_detail.*.quantity' => 'required|numeric|min:0.1',
-                'order_detail.*.user_price' => 'required|numeric|min:0',
+                'order_detail.*.price' => 'required|numeric|min:0',
                 'order_detail.*.discount' => 'sometimes|numeric|min:0',
                 'order_detail.*.discount_type' => 'sometimes|integer|in:1,2',
                 'order_detail.*.note' => 'nullable|string',
@@ -128,9 +127,9 @@ class CreateOrderRequest extends FormRequest
             'order_detail.*.quantity.required' => 'Số lượng là bắt buộc',
             'order_detail.*.quantity.numeric' => 'Số lượng phải là số',
             'order_detail.*.quantity.min' => 'Số lượng phải lớn hơn 0',
-            'order_detail.*.user_price.required' => 'Giá là bắt buộc',
-            'order_detail.*.user_price.numeric' => 'Giá phải là số',
-            'order_detail.*.user_price.min' => 'Giá phải lớn hơn hoặc bằng 0',
+            'order_detail.*.price.required' => 'Giá là bắt buộc',
+            'order_detail.*.price.numeric' => 'Giá phải là số',
+            'order_detail.*.price.min' => 'Giá phải lớn hơn hoặc bằng 0',
             'order_detail.*.discount.numeric' => 'Giảm giá phải là số',
             'order_detail.*.discount.min' => 'Giảm giá phải lớn hơn hoặc bằng 0',
             'order_detail.*.discount_type.integer' => 'Loại giảm giá phải là số nguyên',
@@ -145,9 +144,9 @@ class CreateOrderRequest extends FormRequest
             'order_detail.*.topping.*.quantity.required' => 'Số lượng topping là bắt buộc',
             'order_detail.*.topping.*.quantity.numeric' => 'Số lượng topping phải là số',
             'order_detail.*.topping.*.quantity.min' => 'Số lượng topping phải lớn hơn 0',
-            'order_detail.*.topping.*.user_price.required' => 'Giá topping là bắt buộc',
-            'order_detail.*.topping.*.user_price.numeric' => 'Giá topping phải là số',
-            'order_detail.*.topping.*.user_price.min' => 'Giá topping phải lớn hơn hoặc bằng 0',
+            'order_detail.*.topping.*.price.required' => 'Giá topping là bắt buộc',
+            'order_detail.*.topping.*.price.numeric' => 'Giá topping phải là số',
+            'order_detail.*.topping.*.price.min' => 'Giá topping phải lớn hơn hoặc bằng 0',
         ];
     }
 

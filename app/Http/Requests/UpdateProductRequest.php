@@ -26,6 +26,7 @@ class UpdateProductRequest extends FormRequest
             'ingredients' => 'nullable|array',
             'ingredients.*.id' => 'required|integer|exists:ingredients,id',
             'ingredients.*.quantity' => 'required|numeric|min:0',
+            'is_topping' => 'sometimes|boolean',
         ];
     }
 

@@ -14,7 +14,8 @@ class Product extends Model
         'unit',
         'category_ids',
         'ingredients',
-        'user_id'
+        'user_id',
+        'is_topping'
     ];
 
     protected $casts = [
@@ -23,6 +24,7 @@ class Product extends Model
         'retail_cost' => 'integer',
         'base_cost' => 'integer',
         'user_id' => 'integer',
+        'is_topping' => 'boolean'
     ];
 
     public function categories()

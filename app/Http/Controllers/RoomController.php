@@ -26,7 +26,7 @@ class RoomController extends Controller
                 // Tìm order chưa hoàn thành (status_order = 2) và load customer
                 $order = Order::with('customer')
                     ->where('room_id', $room->id)
-                    ->where('status_order', 1)
+                    ->where('status_order', 2)
                     ->where('user_id', User::getEffectiveUserId())
                     ->orderBy('created_at', 'desc')
                     ->first();
@@ -147,14 +147,34 @@ class RoomController extends Controller
     private function formatOrderForRoom($order)
     {
         //log ra order_detail
-        \Illuminate\Support\Facades\Log::info('Order detail: ' . json_encode($order->order_detail));
         $retailCost = 0;
-        if ($order->order_detail && is_array($order->order_detail)) {
+        $payments = $order->payment ?? null;
 
+        if ($payments) {
+            // Nếu payment là mảng liên kết (['price' => ...])
+            if (is_array($payments) && isset($payments['price'])) {
+                $retailCost = floatval($payments['price']);
+            }
+            // Nếu payment là danh sách các payment
+            else if (is_array($payments)) {
+                foreach ($payments as $p) {
+                    if (is_array($p) && isset($p['price'])) {
+                        $retailCost += floatval($p['price']);
+                    }
+                }
+            }
+            // Nếu payment là object
+            else if (is_object($payments) && isset($payments->price)) {
+                $retailCost = floatval($payments->price);
+            }
+        }
+
+        // 2) Nếu không có payment hoặc payment = 0 -> fallback tính từ order_detail
+        if ($retailCost == 0 && $order->order_detail && is_array($order->order_detail)) {
             foreach ($order->order_detail as $detail) {
                 $userPrice = $detail['user_price'] ?? $detail['price'] ?? 0;
                 $quantity = $detail['quantity'] ?? 0;
-                $retailCost += $userPrice * $quantity;
+                $retailCost += floatval($userPrice) * floatval($quantity);
             }
         }
 
@@ -165,7 +185,11 @@ class RoomController extends Controller
             $name = $order->customer->name;
             $phone = $order->customer->phone;
         }
-
+        if (floor($retailCost) == $retailCost) {
+            $retailCost = (int) $retailCost;
+        } else {
+            $retailCost = round($retailCost, 2);
+        }
         return [
             'id' => $order->id,
             'customer_id' => $order->customer_id,

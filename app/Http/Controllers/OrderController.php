@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 use App\Http\Requests\CreateOrderRequest;
 use App\Models\User;
 
+
 class OrderController extends Controller
 {
     public function index(Request $request)
@@ -72,7 +73,7 @@ class OrderController extends Controller
                         'message' => 'Bàn không tồn tại hoặc không thuộc về bạn'
                     ], 404);
                 }
-
+                $this->fillToppingPrices($validated['order_detail']);
                 // Tạo order
                 $order = Order::create($validated);
 
@@ -137,12 +138,13 @@ class OrderController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Không tìm thấy đơn hàng'], 404);
         }
 
-        $validated = $request->validate([
+        // Validation đầy đủ cho tất cả các trường
+        $rules = [
             'type' => 'sometimes|integer|in:1,2',
             'room_id' => 'nullable|integer|exists:rooms,id',
             'room_type' => 'sometimes|string|in:free,using,pre_book',
             'note' => 'nullable|string',
-            'discount' => 'sometimes|numeric|min:0',
+            'discount' => 'nullable|numeric|min:0',
             'discount_type' => 'sometimes|integer|in:1,2',
             'customer_id' => 'nullable|integer|exists:customers,id',
             'supplier_id' => 'nullable|integer|exists:suppliers,id',
@@ -150,28 +152,93 @@ class OrderController extends Controller
             'payment' => 'sometimes|array',
             'payment.type' => 'required_with:payment|integer|in:1,2,3',
             'payment.price' => 'required_with:payment|numeric|min:0',
-        ]);
+            'order_detail' => 'sometimes|array|min:1',
+        ];
+
+        // Validation chi tiết cho order_detail dựa trên type
+        if ($request->has('order_detail')) {
+            if ($order->type == 1 || ($request->has('type') && $request->type == 1)) {
+                // Đơn BÁN
+                $rules = array_merge($rules, [
+                    'order_detail.*.product_id' => 'required|integer|exists:products,id',
+                    'order_detail.*.quantity' => 'required|numeric|min:0.1',
+                    'order_detail.*.price' => 'required|numeric|min:0',
+                    'order_detail.*.discount' => 'sometimes|numeric|min:0',
+                    'order_detail.*.discount_type' => 'sometimes|integer|in:1,2',
+                    'order_detail.*.note' => 'nullable|string',
+                    'order_detail.*.topping' => 'sometimes|array',
+                    'order_detail.*.topping.*.product_id' => 'required|integer|exists:products,id',
+                    'order_detail.*.topping.*.quantity' => 'required|numeric|min:0.1',
+                ]);
+            } else {
+                // Đơn NHẬP
+                $rules = array_merge($rules, [
+                    'order_detail.*.ingredient_id' => 'required|integer|exists:ingredients,id',
+                    'order_detail.*.quantity' => 'required|numeric|min:0.1',
+                    'order_detail.*.price' => 'required|numeric|min:0',
+                    'order_detail.*.discount' => 'sometimes|numeric|min:0',
+                    'order_detail.*.discount_type' => 'sometimes|integer|in:1,2',
+                    'order_detail.*.note' => 'nullable|string',
+                ]);
+            }
+        }
+
+        $validated = $request->validate($rules);
 
         DB::beginTransaction();
         try {
-            // Nếu thay đổi status_order từ 2 -> 1
-            if (isset($validated['status_order']) && $order->status_order == 2 && $validated['status_order'] == 1) {
+            // Guard: Không cho thay đổi order_detail khi đơn đã hoàn thành (status_order = 1)
+            if (isset($validated['order_detail']) && $order->status_order == 1) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Không thể thay đổi chi tiết đơn hàng khi đơn đã hoàn thành'
+                ], 400);
+            }
+
+            // Xử lý cập nhật order_detail (nếu order đang ở trạng thái chờ - status_order = 2)
+            if (isset($validated['order_detail']) && $order->status_order == 2) {
                 if ($order->type == 1) {
-                    // Đơn bán: trừ thêm từ in_stock
-                    $this->processProductSale($order->order_detail, 1, true);
+                    $this->fillToppingPrices($validated['order_detail']);
+                }
+                if ($order->type == 1) {
+                    $this->revertProductSale($order->order_detail, $order->status_order);
                 } else if ($order->type == 2) {
-                    // Đơn nhập: cộng vào in_stock
-                    $this->processIngredientImport($order->order_detail, 1, true);
+                    $this->revertIngredientImport($order->order_detail, $order->status_order);
+                }
+
+                // Áp dụng tác động kho của order_detail mới
+                if ($order->type == 1) {
+                    $this->processProductSale($validated['order_detail'], $order->status_order);
+                } else if ($order->type == 2) {
+                    $this->processIngredientImport($validated['order_detail'], $order->status_order);
                 }
             }
 
+            // Xử lý thay đổi status_order từ 2 -> 1 (chờ xác nhận -> hoàn thành)
+            if (isset($validated['status_order']) && $order->status_order == 2 && $validated['status_order'] == 1) {
+                // Sử dụng order_detail mới nếu có, ngược lại dùng order_detail hiện tại
+                $orderDetailToProcess = $validated['order_detail'] ?? $order->order_detail;
+
+                if ($order->type == 1) {
+                    // Đơn bán: trừ thêm từ in_stock
+                    $this->processProductSale($orderDetailToProcess, 1, true);
+                } else if ($order->type == 2) {
+                    // Đơn nhập: cộng vào in_stock
+                    $this->processIngredientImport($orderDetailToProcess, 1, true);
+                }
+            }
+
+            // Cập nhật order
             $order->update($validated);
 
             // Cập nhật room type nếu có (chỉ với đơn bán)
-            if ($order->type == 1 && isset($validated['room_id']) && isset($validated['room_type'])) {
-                $room = Room::where('user_id', User::getEffectiveUserId())->find($validated['room_id']);
-                if ($room) {
-                    $room->update(['type' => $validated['room_type']]);
+            if ($order->type == 1 && isset($validated['room_type'])) {
+                $roomId = $validated['room_id'] ?? $order->room_id;
+                if ($roomId) {
+                    $room = Room::where('user_id', User::getEffectiveUserId())->find($roomId);
+                    if ($room) {
+                        $room->update(['type' => $validated['room_type']]);
+                    }
                 }
             }
 
@@ -200,8 +267,8 @@ class OrderController extends Controller
         foreach ($order->order_detail as $detail) {
             $enrichedDetail = [
                 'quantity' => $detail['quantity'],
-                'user_price' => $detail['user_price'] ?? $detail['price'] ?? 0,
-                'discount' => $detail['discount'] ?? 0,
+                'price' => $detail['price'] ?? 0,
+                'discount' => $this->formatNumberValue($detail['discount'] ?? 0),
                 'discount_type' => $detail['discount_type'] ?? 1,
                 'note' => $detail['note'] ?? null,
             ];
@@ -222,7 +289,7 @@ class OrderController extends Controller
                         'unit' => $product->unit,
                         'retail_cost' => $product->retail_cost,
                         'base_cost' => $product->base_cost,
-                        'user_price' => $detail['user_price'] ?? $detail['price'] ?? 0,
+                        'price' => $detail['price'] ?? 0,
                     ];
                 }
 
@@ -236,7 +303,7 @@ class OrderController extends Controller
                         $enrichedTopping = [
                             'id' => $topping['product_id'],
                             'quantity' => $topping['quantity'],
-                            'user_price' => $topping['user_price'] ?? $topping['price'] ?? 0,
+                            'price' => $topping['price'] ?? 0,
                             'product' => null
                         ];
 
@@ -248,7 +315,7 @@ class OrderController extends Controller
                                 'unit' => $toppingProduct->unit,
                                 'retail_cost' => $toppingProduct->retail_cost,
                                 'base_cost' => $toppingProduct->base_cost,
-                                'user_price' => $topping['user_price'] ?? $topping['price'] ?? 0,
+                                'price' => $topping['price'] ?? 0,
                             ];
                         }
 
@@ -271,7 +338,7 @@ class OrderController extends Controller
                         'image' => $ingredient->image,
                         'unit' => $ingredient->unit,
                         'cost' => $ingredient->cost,
-                        'user_price' => $detail['user_price'] ?? $detail['price'] ?? 0,
+                        'price' => $detail['price'] ?? $detail['price'] ?? 0,
                     ];
                 }
             }
@@ -281,6 +348,7 @@ class OrderController extends Controller
 
         // Thay thế order_detail bằng enriched version
         $orderArray = $order->toArray();
+        $orderArray['discount'] = $this->formatNumberValue($orderArray['discount'] ?? 0);
         $orderArray['order_detail'] = $enrichedDetails;
 
         // Tính tổng tiền
@@ -297,7 +365,7 @@ class OrderController extends Controller
         $total = 0;
 
         foreach ($orderDetails as $detail) {
-            $itemTotal = $detail['user_price'] * $detail['quantity'];
+            $itemTotal = $detail['price'] * $detail['quantity'];
 
             // Trừ discount của item
             if ($detail['discount'] > 0) {
@@ -311,7 +379,7 @@ class OrderController extends Controller
             // Cộng topping
             if (isset($detail['topping'])) {
                 foreach ($detail['topping'] as $topping) {
-                    $itemTotal += $topping['user_price'] * $topping['quantity'];
+                    $itemTotal += $topping['price'] * $topping['quantity'];
                 }
             }
 
@@ -383,7 +451,28 @@ class OrderController extends Controller
             }
         }
     }
+    private function formatNumberValue($value)
+    {
+        if ($value === null) {
+            return 0;
+        }
 
+        if (!is_numeric($value)) {
+
+            return $value;
+        }
+
+        $num = (float) $value;
+        // Nếu là số nguyên (ví dụ 3.00) -> trả về int 3
+        if (floor($num) == $num) {
+            return (int) $num;
+        }
+
+        // Ngược lại, giữ tối đa 2 chữ số thập phân, bỏ số 0 thừa (ví dụ 2.450 -> 2.45 ; 2.400 -> 2.4)
+        $s = number_format($num, 2, '.', '');
+        $s = rtrim(rtrim($s, '0'), '.');
+        return (float) $s;
+    }
     /**
      * Xử lý NHẬP nguyên liệu - cộng vào kho
      */
@@ -407,6 +496,101 @@ class OrderController extends Controller
                         // Hoàn thành: cộng vào cả available và in_stock
                         $ingredient->increment('available', $quantityToAdd);
                         $ingredient->increment('in_stock', $quantityToAdd);
+                    }
+                }
+            }
+        }
+    }
+    /**
+     * Rollback tác động kho của đơn bán (cộng lại available/in_stock đã trừ)
+     */
+    private function revertProductSale($orderDetail, $statusOrder)
+    {
+        foreach ($orderDetail as $item) {
+            if (!isset($item['product_id'])) continue;
+
+            $product = Product::where('user_id', User::getEffectiveUserId())->find($item['product_id']);
+            if ($product && $product->ingredients) {
+                foreach ($product->ingredients as $ingredientData) {
+                    $ingredient = Ingredient::where('user_id', User::getEffectiveUserId())->find($ingredientData['id']);
+                    if ($ingredient) {
+                        $quantityToRestore = $ingredientData['quantity'] * $item['quantity'];
+
+                        if ($statusOrder == 2) {
+                            // Chỉ cộng lại available
+                            $ingredient->increment('available', $quantityToRestore);
+                        } elseif ($statusOrder == 1) {
+                            // Cộng lại cả available và in_stock
+                            $ingredient->increment('available', $quantityToRestore);
+                            $ingredient->increment('in_stock', $quantityToRestore);
+                        }
+                    }
+                }
+            }
+
+            // Rollback topping
+            if (isset($item['topping'])) {
+                foreach ($item['topping'] as $topping) {
+                    $toppingProduct = Product::where('user_id', User::getEffectiveUserId())->find($topping['product_id']);
+                    if ($toppingProduct && $toppingProduct->ingredients) {
+                        foreach ($toppingProduct->ingredients as $ingredientData) {
+                            $ingredient = Ingredient::where('user_id', User::getEffectiveUserId())->find($ingredientData['id']);
+                            if ($ingredient) {
+                                $quantityToRestore = $ingredientData['quantity'] * $topping['quantity'];
+
+                                if ($statusOrder == 2) {
+                                    $ingredient->increment('available', $quantityToRestore);
+                                } elseif ($statusOrder == 1) {
+                                    $ingredient->increment('available', $quantityToRestore);
+                                    $ingredient->increment('in_stock', $quantityToRestore);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Rollback tác động kho của đơn nhập (trừ lại available/in_stock đã cộng)
+     */
+    private function revertIngredientImport($orderDetail, $statusOrder)
+    {
+        foreach ($orderDetail as $item) {
+            if (!isset($item['ingredient_id'])) continue;
+
+            $ingredient = Ingredient::where('user_id', User::getEffectiveUserId())->find($item['ingredient_id']);
+            if ($ingredient) {
+                $quantityToRevert = $item['quantity'];
+
+                if ($statusOrder == 2) {
+                    // Trừ lại available
+                    $ingredient->decrement('available', $quantityToRevert);
+                } elseif ($statusOrder == 1) {
+                    // Trừ lại cả available và in_stock
+                    $ingredient->decrement('available', $quantityToRevert);
+                    $ingredient->decrement('in_stock', $quantityToRevert);
+                }
+            }
+        }
+    }
+    /**
+     * Tự động điền retail_cost cho topping trong order_detail
+     */
+    private function fillToppingPrices(&$orderDetail)
+    {
+        foreach ($orderDetail as &$item) {
+            if (isset($item['topping']) && is_array($item['topping'])) {
+                foreach ($item['topping'] as &$topping) {
+                    // Nếu không có price hoặc price = 0, lấy từ retail_cost của product
+                    if (!isset($topping['price']) || $topping['price'] <= 0) {
+                        $product = Product::where('user_id', User::getEffectiveUserId())
+                            ->find($topping['product_id']);
+
+                        if ($product) {
+                            $topping['price'] = $product->retail_cost;
+                        }
                     }
                 }
             }
