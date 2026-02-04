@@ -8,6 +8,7 @@ use App\Models\Room;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class QrOrderController extends Controller
 {
@@ -68,99 +69,139 @@ class QrOrderController extends Controller
      */
     public function createOrder(Request $request)
     {
-        $validated = $request->validate([
-            'apiKey' => 'required|string',
-            'roomId' => 'required|string',
-            'order_detail' => 'required|array',
-            'order_detail.*.product_id' => 'required|integer',
-            'order_detail.*.quantity' => 'required|integer|min:1',
-            'order_detail.*.retail_cost' => 'required|numeric',
-            'note' => 'nullable|string',
-        ]);
-
-        // Tìm user theo api_key
-        $user = User::where('api_key', $validated['apiKey'])->first();
-        if (!$user) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'API Key không hợp lệ'
-            ], 401);
-        }
-
-        // Decode roomId
         try {
-            $roomId = base64_decode($validated['roomId']);
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Room ID không hợp lệ'
-            ], 400);
-        }
+            $validated = $request->validate([
+                'apiKey' => 'required|string',
+                'roomId' => 'required|string',
+                'order_detail' => 'required|array',
+                'order_detail.*.product_id' => 'required|integer',
+                'order_detail.*.quantity' => 'required|integer|min:1',
+                'order_detail.*.price' => 'required|numeric',
+                'note' => 'nullable|string',
+            ]);
 
-        // Verify room belongs to user
-        $room = Room::where('id', $roomId)
-            ->where('user_id', $user->id)
-            ->first();
+            // Tìm user theo api_key
+            $user = User::where('api_key', $validated['apiKey'])->first();
+            if (!$user) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'API Key không hợp lệ'
+                ], 401);
+            }
 
-        if (!$room) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Phòng/Bàn không tồn tại'
-            ], 404);
-        }
+            // Decode roomId
+            try {
+                $roomId = base64_decode($validated['roomId']);
+                if (!is_numeric($roomId)) {
+                    throw new \Exception('Room ID không đúng định dạng');
+                }
+            } catch (\Exception $e) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Room ID không hợp lệ: ' . $e->getMessage()
+                ], 400);
+            }
 
-        DB::beginTransaction();
-        try {
-            // Lấy thông tin sản phẩm để enrich order_detail
-            $productIds = collect($validated['order_detail'])->pluck('product_id');
-            $products = Product::whereIn('id', $productIds)
+            // Verify room belongs to user
+            $room = Room::where('id', $roomId)
                 ->where('user_id', $user->id)
-                ->get()
-                ->keyBy('id');
+                ->first();
 
-            $enrichedOrderDetail = collect($validated['order_detail'])->map(function ($item) use ($products) {
-                $product = $products->get($item['product_id']);
-                return [
-                    'product_id' => $item['product_id'],
-                    'name' => $product ? $product->name : 'Unknown',
-                    'image' => $product ? $product->image : null,
-                    'unit' => $product ? $product->unit : null,
-                    'quantity' => $item['quantity'],
-                    'retail_cost' => $item['retail_cost'],
-                ];
-            })->toArray();
+            if (!$room) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Phòng/Bàn không tồn tại hoặc không thuộc về cửa hàng này'
+                ], 404);
+            }
 
-            // Kiểm tra trạng thái room
-            if ($room->type === 'free') {
-                // Tạo order mới
-                $order = Order::create([
-                    'type' => 1, // Đơn bán
-                    'room_id' => $roomId,
-                    'room_type' => 'using',
-                    'note' => $validated['note'] ?? null,
-                    'discount' => 0,
-                    'discount_type' => 1,
-                    'status_order' => 1, // Đã xác nhận
-                    'payment' => ['type' => 1, 'price' => 0],
-                    'order_detail' => $enrichedOrderDetail,
-                    'user_id' => $user->id,
-                ]);
-
-                // Cập nhật type của room
-                $room->update(['type' => 'using']);
-
-                // Trừ kho nguyên liệu
-                $this->processProductSale($enrichedOrderDetail, $user->id);
-            } else if ($room->type === 'using') {
-                // Tìm order chưa hoàn thành của room này
-                $existingOrder = Order::where('room_id', $roomId)
-                    ->where('status_order', 2) // Chưa hoàn thành
+            DB::beginTransaction();
+            try {
+                // Lấy thông tin sản phẩm để enrich order_detail
+                $productIds = collect($validated['order_detail'])->pluck('product_id');
+                $products = Product::whereIn('id', $productIds)
                     ->where('user_id', $user->id)
-                    ->orderBy('created_at', 'desc')
-                    ->first();
+                    ->get()
+                    ->keyBy('id');
 
-                if (!$existingOrder) {
-                    // Nếu không tìm thấy order, tạo mới
+                $enrichedOrderDetail = collect($validated['order_detail'])->map(function ($item) use ($products) {
+                    $product = $products->get($item['product_id']);
+                    if (!$product) {
+                        throw new \Exception("Sản phẩm ID {$item['product_id']} không tồn tại");
+                    }
+                    return [
+                        'product_id' => $item['product_id'],
+                        'name' => $product->name,
+                        'image' => $product->image,
+                        'unit' => $product->unit,
+                        'quantity' => $item['quantity'],
+                        'price' => $item['price'],
+                    ];
+                })->toArray();
+
+                // Kiểm tra trạng thái room
+                if ($room->type === 'free') {
+                    // Tạo order mới
+                    $order = Order::create([
+                        'type' => 1, // Đơn bán
+                        'room_id' => $roomId,
+                        'room_type' => 'using',
+                        'note' => $validated['note'] ?? null,
+                        'discount' => 0,
+                        'discount_type' => 1,
+                        'status_order' => 2, // Chờ xác nhận (FIXED)
+                        'payment' => ['type' => 1, 'price' => 0],
+                        'order_detail' => $enrichedOrderDetail,
+                        'user_id' => $user->id,
+                    ]);
+
+                    // Cập nhật type của room
+                    $room->update(['type' => 'using']);
+
+                    // Trừ kho nguyên liệu
+                    $this->processProductSale($enrichedOrderDetail, $user->id);
+                } else if ($room->type === 'using') {
+                    // Tìm order chưa hoàn thành của room này
+                    $existingOrder = Order::where('room_id', $roomId)
+                        ->where('status_order', 2) // Chờ xác nhận
+                        ->where('user_id', $user->id)
+                        ->orderBy('created_at', 'desc')
+                        ->first();
+
+                    if (!$existingOrder) {
+                        // Nếu không tìm thấy order, tạo mới
+                        $order = Order::create([
+                            'type' => 1,
+                            'room_id' => $roomId,
+                            'room_type' => 'using',
+                            'note' => $validated['note'] ?? null,
+                            'discount' => 0,
+                            'discount_type' => 1,
+                            'status_order' => 2, // Chờ xác nhận (FIXED)
+                            'payment' => ['type' => 1, 'price' => 0],
+                            'order_detail' => $enrichedOrderDetail,
+                            'user_id' => $user->id,
+                        ]);
+
+                        // Trừ kho nguyên liệu
+                        $this->processProductSale($enrichedOrderDetail, $user->id);
+                    } else {
+                        // Merge order_detail mới vào order_detail cũ
+                        $existingOrderDetail = $existingOrder->order_detail ?? [];
+                        $mergedOrderDetail = $this->mergeOrderDetails($existingOrderDetail, $enrichedOrderDetail);
+
+                        // Cập nhật order
+                        $existingOrder->update([
+                            'order_detail' => $mergedOrderDetail,
+                            'note' => $validated['note'] ?? $existingOrder->note,
+                        ]);
+
+                        $order = $existingOrder;
+
+                        // Trừ kho nguyên liệu cho phần mới thêm
+                        $this->processProductSale($enrichedOrderDetail, $user->id);
+                    }
+                } else {
+                    // Trạng thái khác (pre_book, etc.) - tạo order mới
                     $order = Order::create([
                         'type' => 1,
                         'room_id' => $roomId,
@@ -168,84 +209,71 @@ class QrOrderController extends Controller
                         'note' => $validated['note'] ?? null,
                         'discount' => 0,
                         'discount_type' => 1,
-                        'status_order' => 1,
+                        'status_order' => 2, // Chờ xác nhận (FIXED)
                         'payment' => ['type' => 1, 'price' => 0],
                         'order_detail' => $enrichedOrderDetail,
                         'user_id' => $user->id,
                     ]);
 
-                    // Trừ kho nguyên liệu
-                    $this->processProductSale($enrichedOrderDetail, $user->id);
-                } else {
-                    // Merge order_detail mới vào order_detail cũ
-                    $existingOrderDetail = $existingOrder->order_detail ?? [];
-                    $mergedOrderDetail = $this->mergeOrderDetails($existingOrderDetail, $enrichedOrderDetail);
-
-                    // Cập nhật order
-                    $existingOrder->update([
-                        'order_detail' => $mergedOrderDetail,
-                        'note' => $validated['note'] ?? $existingOrder->note,
-                    ]);
-
-                    $order = $existingOrder;
-
-                    // Trừ kho nguyên liệu cho phần mới thêm
+                    $room->update(['type' => 'using']);
                     $this->processProductSale($enrichedOrderDetail, $user->id);
                 }
-            } else {
-                // Trạng thái khác (pre_book, etc.) - tạo order mới
-                $order = Order::create([
-                    'type' => 1,
-                    'room_id' => $roomId,
-                    'room_type' => 'using',
-                    'note' => $validated['note'] ?? null,
-                    'discount' => 0,
-                    'discount_type' => 1,
-                    'status_order' => 1,
-                    'payment' => ['type' => 1, 'price' => 0],
-                    'order_detail' => $enrichedOrderDetail,
-                    'user_id' => $user->id,
-                ]);
 
-                $room->update(['type' => 'using']);
-                $this->processProductSale($enrichedOrderDetail, $user->id);
+                DB::commit();
+
+                $order->load(['room']);
+                $productList = collect($order->order_detail)->map(function ($item) {
+                    $quantity = $item['quantity'] ?? 0;
+                    $name = $item['name'] ?? 'Unknown';
+                    return "-{$name} ({$quantity})";
+                })->join("\n");
+
+                $roomName = $order->room->name ?? $order->room_id ?? 'Không xác định';
+
+                // Prepare socket data
+                $socketData = [
+                    'user_id' =>  $user->id,
+                    'roomName' => $room->name,
+                    'id' => $order->id,
+                    'order_id' => $order->id,
+                    'code' =>  "#$order->id",
+                    'description' => "Đặt món từ bàn: {$roomName}\n\n{$productList}",
+                    'total' => collect($order->order_detail)->sum(function ($item) {
+                        return ($item['price'] ?? 0) * ($item['quantity'] ?? 0);
+                    }),
+                    'created_at' => $order->created_at->toISOString(),
+                ];
+
+                return response()->json([
+                    'status' => 'success',
+                    'message' => $room->type === 'using' && isset($existingOrder) ? 'Cập nhật đơn hàng thành công' : 'Đặt món thành công',
+                    'data' => [
+                        'order' => $order,
+                        'socket_data' => $socketData,
+                    ]
+                ], 201);
+            } catch (\Exception $e) {
+                DB::rollBack();
+                Log::error('QrOrderController@createOrder transaction error: ' . $e->getMessage());
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Lỗi khi tạo đơn hàng: ' . $e->getMessage()
+                ], 500);
             }
-
-            DB::commit();
-
-            $order->load(['room']);
-
-            // Prepare socket data
-            $socketData = [
-                'apiKey' => $validated['apiKey'],
-                'roomName' => $room->name,
-                'orderId' => $order->id,
-                'products' => collect($order->order_detail)->map(function ($item) {
-                    return ($item['name'] ?? 'Unknown') . ' x' . ($item['quantity'] ?? 0);
-                })->values()->all(),
-                'total' => collect($order->order_detail)->sum(function ($item) {
-                    return ($item['retail_cost'] ?? 0) * ($item['quantity'] ?? 0);
-                }),
-                'created_at' => $order->created_at->toISOString(),
-            ];
-
-            return response()->json([
-                'status' => 'success',
-                'message' => $room->type === 'using' && isset($existingOrder) ? 'Cập nhật đơn hàng thành công' : 'Đặt món thành công',
-                'data' => [
-                    'order' => $order,
-                    'socket_data' => $socketData,
-                ]
-            ], 201);
-        } catch (\Exception $e) {
-            DB::rollBack();
+        } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Lỗi khi tạo đơn hàng: ' . $e->getMessage()
+                'message' => 'Dữ liệu không hợp lệ',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('QrOrderController@createOrder error: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Lỗi hệ thống: ' . $e->getMessage()
             ], 500);
         }
     }
-
     private function mergeOrderDetails($existingDetails, $newDetails)
     {
         $merged = $existingDetails;

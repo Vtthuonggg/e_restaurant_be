@@ -16,11 +16,11 @@ class RegisterWithOtpRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'email' => 'required|email|max:255|unique:users,email',
+            'email' => 'required|email|unique:users,email|max:255',
+            'phone' => 'required|string|max:15|unique:users,phone',
             'otp' => 'required|string|size:6',
             'name' => 'required|string|max:255',
             'password' => 'required|string|min:6',
-            'phone' => 'nullable|string|max:20',
         ];
     }
 

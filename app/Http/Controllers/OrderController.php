@@ -26,7 +26,13 @@ class OrderController extends Controller
         if ($request->has('type')) {
             $query->where('type', $request->type);
         }
+        if ($request->query('supplier_id') !== null) {
+            $query->where('supplier_id', $request->query('supplier_id'));
+        }
 
+        if ($request->query('customer_id') !== null) {
+            $query->where('customer_id', $request->query('customer_id'));
+        }
         if ($request->has('status_order')) {
             $query->where('status_order', $request->status_order);
         }
@@ -594,6 +600,62 @@ class OrderController extends Controller
                     }
                 }
             }
+        }
+    }
+
+
+    public function destroy($id)
+    {
+        $order = Order::where('user_id', User::getEffectiveUserId())
+            ->with(['room'])
+            ->find($id);
+
+        if (!$order) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Không tìm thấy đơn hàng'
+            ], 404);
+        }
+
+        DB::beginTransaction();
+        try {
+            if ($order->type == 2) {
+                $this->revertIngredientImport($order->order_detail, $order->status_order);
+            }
+            if ($order->type == 1 && $order->room_id) {
+                $room = Room::where('user_id', User::getEffectiveUserId())
+                    ->find($order->room_id);
+
+                if ($room) {
+                    $hasOtherOrders = Order::where('room_id', $order->room_id)
+                        ->where('id', '!=', $id)
+                        ->where('status_order', 2)
+                        ->exists();
+
+                    if (!$hasOtherOrders) {
+                        $room->update(['type' => 'free']);
+                    }
+                }
+            }
+
+            $order->delete();
+
+            DB::commit();
+
+            $message = $order->type == 2
+                ? 'Xóa đơn nhập và hoàn trả kho thành công'
+                : 'Xóa đơn bán thành công';
+
+            return response()->json([
+                'status' => 'success',
+                'message' => $message
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Lỗi khi xóa đơn hàng: ' . $e->getMessage()
+            ], 500);
         }
     }
 }

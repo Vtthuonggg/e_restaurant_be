@@ -126,66 +126,45 @@ class OtpController extends Controller
      */
     public function registerWithOtp(RegisterWithOtpRequest $request)
     {
-        $email = $request->email;
-        $otp = $request->otp;
+        $validated = $request->validated();
 
-        DB::beginTransaction();
-        try {
-            // Kiểm tra OTP đã được verify chưa
-            $otpRecord = OtpVerification::where('email', $email)
-                ->where('otp', $otp)
-                ->where('is_verified', true)
-                ->first();
+        // Verify OTP
+        $otpRecord = OtpVerification::where('email', $validated['email'])
+            ->where('is_verified', true)
+            ->where('created_at', '>=', now()->subMinutes(10))
+            ->first();
 
-            if (!$otpRecord) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Vui lòng xác thực OTP trước khi đăng ký'
-                ], 422);
-            }
-
-            // Kiểm tra OTP đã quá 10 phút chưa (sau khi verify)
-            if ($otpRecord->updated_at->diffInMinutes(now()) > 10) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'OTP đã hết hạn. Vui lòng gửi lại mã mới'
-                ], 422);
-            }
-
-            // Tạo user mới
-            $user = User::create([
-                'name' => $request->name,
-                'email' => $email,
-                'phone' => $request->phone,
-                'password' => Hash::make($request->password),
-                'user_type' => 2,
-                'api_key' => bin2hex(random_bytes(32)),
-            ]);
-
-            // Xóa OTP sau khi đăng ký thành công
-            $otpRecord->delete();
-
-            // Tạo token
-            $token = $user->createToken('auth_token')->plainTextToken;
-
-            DB::commit();
-
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Đăng ký thành công',
-                'data' => [
-                    'user' => $user,
-                    'access_token' => $token,
-                    'token_type' => 'Bearer',
-                ]
-            ], 201);
-        } catch (\Exception $e) {
-            DB::rollBack();
+        if (!$otpRecord) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Lỗi khi đăng ký: ' . $e->getMessage()
-            ], 500);
+                'message' => 'OTP chưa được xác thực hoặc đã hết hạn'
+            ], 400);
         }
+
+        // Tạo user với phone + email
+        $user = User::create([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'phone' => $validated['phone'],  // ← Đảm bảo có phone
+            'password' => Hash::make($validated['password']),
+            'user_type' => 2,
+            'api_key' => bin2hex(random_bytes(32)),
+        ]);
+
+        // Xóa OTP đã dùng
+        $otpRecord->delete();
+
+        $token = $user->createToken('auth_token')->plainTextToken;
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Đăng ký thành công',
+            'data' => [
+                'user' => $user,
+                'access_token' => $token,
+                'token_type' => 'Bearer',
+            ]
+        ], 201);
     }
 
     /**

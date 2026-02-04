@@ -55,14 +55,7 @@ class User extends Authenticatable
             'password' => 'hashed',
         ];
     }
-    public function setPasswordAttribute($value)
-    {
-        if ($value) {
-            $this->attributes['password'] = bcrypt($value);
-        } else {
-            $this->attributes['password'] = null;
-        }
-    }
+
     public function customers()
     {
         return $this->hasMany(Customer::class);

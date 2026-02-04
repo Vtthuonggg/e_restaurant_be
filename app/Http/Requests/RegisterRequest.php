@@ -15,12 +15,16 @@ class RegisterRequest extends FormRequest
         return true;
     }
 
+
     public function rules(): array
     {
         return [
             'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
+            'phone' => 'required|string|max:15|unique:users,phone',  // ← Phone unique và bắt buộc
+            'email' => 'required|email|max:255|unique:users,email',  // ← Email để xác thực
             'password' => 'required|string|min:6',
+            'store_name' => 'nullable|string|max:255',
+            'address' => 'nullable|string',
         ];
     }
 
@@ -28,15 +32,27 @@ class RegisterRequest extends FormRequest
     {
         return [
             'name.required' => 'Tên là bắt buộc',
-            'name.string' => 'Tên không hợp lệ',
+            'name.string' => 'Tên phải là chuỗi ký tự',
             'name.max' => 'Tên không được vượt quá 255 ký tự',
+
+            'phone.required' => 'Số điện thoại là bắt buộc',
+            'phone.string' => 'Số điện thoại phải là chuỗi ký tự',
+            'phone.max' => 'Số điện thoại không được vượt quá 15 ký tự',
+            'phone.unique' => 'Số điện thoại đã được sử dụng',
+
             'email.required' => 'Email là bắt buộc',
-            'email.string' => 'Email không hợp lệ',
+            'email.email' => 'Email không hợp lệ',
             'email.max' => 'Email không được vượt quá 255 ký tự',
-            'email.unique' => 'Email đã được đăng ký',
+            'email.unique' => 'Email đã được sử dụng',
+
             'password.required' => 'Mật khẩu là bắt buộc',
-            'password.string' => 'Mật khẩu không hợp lệ',
+            'password.string' => 'Mật khẩu phải là chuỗi ký tự',
             'password.min' => 'Mật khẩu phải có ít nhất 6 ký tự',
+
+            'store_name.string' => 'Tên cửa hàng phải là chuỗi ký tự',
+            'store_name.max' => 'Tên cửa hàng không được vượt quá 255 ký tự',
+
+            'address.string' => 'Địa chỉ phải là chuỗi ký tự',
         ];
     }
 
